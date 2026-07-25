@@ -53,6 +53,21 @@ effects, and both win conditions. It writes screenshots to `tests/screenshots/`.
 It needs a Chromium; either run `npx playwright install chromium` or point
 `CHROMIUM_PATH` at an existing one.
 
+## Deployment
+
+Pushing to `main` runs `.github/workflows/deploy-pages.yml`, which typechecks,
+runs the solver tests, builds, and force-pushes the contents of `dist/` to the
+**`gh-pages`** branch. That branch holds build output only — never edit it by
+hand, as every deploy replaces it wholesale.
+
+For this to serve, **Settings → Pages → Source must be "Deploy from a branch"
+with branch `gh-pages` and folder `/ (root)`.** Pointing Pages at `main` cannot
+work: the repo root holds TypeScript source, and its `index.html` references
+`/src/main.ts`, which a browser cannot execute without a bundler.
+
+The site is served from a project subpath (`/Castle_game/`), which is why
+`vite.config.ts` sets `base: './'` — all asset URLs stay relative.
+
 ## Layout
 
 ```
