@@ -135,6 +135,45 @@ game time ran at roughly a third of wall clock under headless rendering, which
 would have quietly shrunk the telegraph warning window relative to the battle on
 exactly the weak devices that drop frames.
 
+## Fitting a landscape world onto a phone
+
+The world is a fixed 1280×600 — 2.13:1, near enough to a phone held sideways.
+Two things then go wrong on mobile, and neither shows up on a desktop browser.
+
+**The visible area is not what CSS thinks it is.** Mobile browsers report a
+layout viewport that ignores the collapsing address bar, so a canvas sized from
+`height: 100%` can be measured against a box that is not entirely on screen.
+`src/core/viewport.ts` takes the size from `visualViewport` instead — the only
+value that describes what the player can actually see — and re-applies it on
+every resize, rotation and toolbar animation.
+
+**A landscape world in a portrait screen is mostly letterbox.** Fitting 2.13:1
+into a phone held upright filled about a fifth of the display. The usual answer
+is a "please rotate your device" card, which does nothing whatsoever for the
+many people who play with rotation lock on. So the stage itself is rotated a
+quarter turn: portrait fills the screen with the same picture, sideways, and if
+rotation lock is off the browser reports landscape, the turn is dropped, and the
+result is identical. Measured coverage went from 22% to 99% on a 390×844 screen,
+and from 33% to 67% on a tablet.
+
+The cost is two pieces of plumbing:
+
+- The Scale Manager measures its parent with `getBoundingClientRect`, which
+  reports a rotated element's *bounding box* — width and height swapped. Its FIT
+  mode cannot survive that, so the game runs on `Phaser.Scale.NONE` and the zoom
+  is computed alongside the rotation.
+- Pointer coordinates have to be un-rotated. `transformX`/`transformY` map one
+  axis each and cannot express a rotation, so the hook is one level up, at
+  `InputManager.transformPointer`, which receives both. It is handed the page
+  position the pointer *would* have had with the stage upright, so Phaser's own
+  smoothing and pointer history are untouched.
+
+That override is the fragile part — it reaches into Phaser rather than sitting
+on a documented extension point — so `tests/viewport.test.mjs` taps and drags
+real screen pixels in a rotated portrait viewport and asserts the game reacted,
+rather than checking the arithmetic. A Phaser upgrade that moves the hook fails
+those tests loudly.
+
 ## Roadmap
 
 **Milestone 3 — campaign.** Handcrafted levels alternating attack and defence,
@@ -147,8 +186,12 @@ Worth doing only once the base loop is proven fun — a combination system on to
 of a loop that does not work will not save it.
 
 **Milestone 5 — Android.** Capacitor wrap of `dist/`. The build already emits
-relative paths and the input is pointer-based, so this is mostly packaging plus
-a pass on touch target sizes and a landscape lock.
+relative paths, the input is pointer-based, and the screen fit above removes the
+need for a landscape lock, so this is mostly packaging plus a pass on touch
+target sizes. The open question is legibility rather than framing: the HUD is
+sized for a 1280px-wide world, which on a 390px phone puts body text under 9
+physical pixels. An in-game camera zoom, or a second HUD scale for small
+screens, is the likely answer — but it wants a real device to judge.
 
 Deliberately deferred: accounts, servers, PvP, castle sharing codes. All of it
 can be layered on the existing save format later without reworking the core.
