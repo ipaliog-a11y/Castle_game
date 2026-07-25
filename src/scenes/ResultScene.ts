@@ -11,25 +11,42 @@ export class ResultScene extends Phaser.Scene {
   create(): void {
     drawBackdrop(this, WORLD_WIDTH, WORLD_HEIGHT, GROUND_Y);
     const r = store.lastResult;
-    const won = r?.attackerWon ?? false;
+    const attackerWon = r?.attackerWon ?? false;
+    const defending = r?.playerSide === 'defend';
+    // The same battle outcome reads as a win or a loss depending on the side.
+    const playerWon = defending ? !attackerWon : attackerWon;
 
     this.add
-      .text(WORLD_WIDTH / 2, 170, won ? 'THE THRONE FALLS' : 'THE CASTLE HOLDS', {
+      .text(WORLD_WIDTH / 2, 160, attackerWon ? 'THE THRONE FALLS' : 'THE CASTLE HOLDS', {
         fontFamily: FONT,
         fontSize: '54px',
-        color: won ? COLORS.danger : COLORS.good,
+        color: playerWon ? COLORS.good : COLORS.danger,
+      })
+      .setOrigin(0.5);
+
+    this.add
+      .text(WORLD_WIDTH / 2, 208, playerWon ? 'Victory' : 'Defeat', {
+        fontFamily: FONT,
+        fontSize: '22px',
+        color: playerWon ? COLORS.good : COLORS.danger,
       })
       .setOrigin(0.5);
 
     if (r) {
       const razed = r.blocksAtStart - r.blocksLeft;
       const lines = [
-        `Siege lasted ${(r.msElapsed / 1000).toFixed(1)}s`,
+        `Battle lasted ${(r.msElapsed / 1000).toFixed(1)}s`,
         `${razed} of ${r.blocksAtStart} blocks brought down`,
-        won ? 'Your castle was not strong enough.' : 'Your walls did their job.',
+        defending
+          ? attackerWon
+            ? 'They reached the throne. Build it stronger.'
+            : 'Your walls held to the last bell.'
+          : attackerWon
+            ? 'Your castle was not strong enough.'
+            : 'Your walls did their job.',
       ];
       this.add
-        .text(WORLD_WIDTH / 2, 250, lines.join('\n'), {
+        .text(WORLD_WIDTH / 2, 286, lines.join('\n'), {
           fontFamily: FONT,
           fontSize: '18px',
           color: COLORS.dim,
@@ -39,9 +56,10 @@ export class ResultScene extends Phaser.Scene {
         .setOrigin(0.5);
     }
 
-    this.button(WORLD_WIDTH / 2 - 150, 400, 'REBUILD', () => this.scene.start('Build'));
-    this.button(WORLD_WIDTH / 2 + 150, 400, 'SIEGE AGAIN', () => this.scene.start('Siege'));
-    this.button(WORLD_WIDTH / 2, 470, 'Menu', () => this.scene.start('Menu'), 140, 34);
+    this.button(WORLD_WIDTH / 2 - 230, 420, 'REBUILD', () => this.scene.start('Build'), 200);
+    this.button(WORLD_WIDTH / 2, 420, 'DEFEND', () => this.scene.start('Defend'), 200);
+    this.button(WORLD_WIDTH / 2 + 230, 420, 'LAY SIEGE', () => this.scene.start('Siege'), 200);
+    this.button(WORLD_WIDTH / 2, 486, 'Menu', () => this.scene.start('Menu'), 140, 34);
   }
 
   private button(

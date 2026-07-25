@@ -1,5 +1,6 @@
 import { Castle } from '../src/core/castle.ts';
 import { GRID_COLS, GRID_ROWS } from '../src/core/config.ts';
+import { solveLaunch, solveLaunchAdaptive } from '../src/core/ballistics.ts';
 
 let pass = 0;
 let fail = 0;
@@ -121,6 +122,79 @@ console.log('support solver');
   check('round-trip keeps block count', back.count() === 2);
   check('round-trip keeps damage', Math.abs(back.get(21, bottom).hp - b.maxHp * 0.5) < 1);
   check('round-trip keeps material', back.get(21, bottom).mat === 'iron');
+}
+
+console.log('\nballistics');
+
+const G = 900;
+
+/** Integrates a shot the same way the game does and returns the closest approach. */
+function simulate(x0, y0, vx, vy, tx, ty, steps = 4000, dt = 1 / 240) {
+  let x = x0, y = y0, sy = vy, best = Infinity;
+  for (let i = 0; i < steps; i++) {
+    sy += G * dt;
+    x += vx * dt;
+    y += sy * dt;
+    best = Math.min(best, Math.hypot(x - tx, y - ty));
+    if (y > 4000) break;
+  }
+  return best;
+}
+
+// 13. A solved shot actually lands on the target it was solved for.
+{
+  const cases = [
+    [118, 566, 800, 480],
+    [118, 566, 1136, 552],
+    [118, 566, 640, 200],
+    [118, 566, 1000, 300],
+  ];
+  for (const [x0, y0, tx, ty] of cases) {
+    const flat = solveLaunch(x0, y0, tx, ty, 1100, G, false);
+    const lob = solveLaunch(x0, y0, tx, ty, 1100, G, true);
+    check(`flat arc reaches (${tx},${ty})`, !!flat && simulate(x0, y0, flat.vx, flat.vy, tx, ty) < 4);
+    check(`lobbed arc reaches (${tx},${ty})`, !!lob && simulate(x0, y0, lob.vx, lob.vy, tx, ty) < 4);
+  }
+}
+
+// 14. The lob really is the higher of the two arcs.
+{
+  const flat = solveLaunch(118, 566, 900, 500, 1100, G, false);
+  const lob = solveLaunch(118, 566, 900, 500, 1100, G, true);
+  check('lobbed arc has the steeper launch angle', lob.angle > flat.angle);
+  check('both arcs use the same speed', Math.abs(Math.hypot(flat.vx, flat.vy) - Math.hypot(lob.vx, lob.vy)) < 1e-6);
+}
+
+// 15. Out-of-range targets report no solution rather than a bad one.
+{
+  check('target beyond range returns null', solveLaunch(118, 566, 99999, 566, 400, G) === null);
+  check('adaptive solver also gives up when unreachable',
+    solveLaunchAdaptive(118, 566, 99999, 566, 300, 600, G) === null);
+  // Height costs range: this target is only 1082px away but 466px up, and the
+  // cannon cannot reach it even at full charge. The AI must handle that.
+  check('a high, distant target is correctly rejected',
+    solveLaunchAdaptive(118, 566, 1200, 100, 520, 1100, G, true) === null);
+}
+
+// 16. The adaptive solver finds the gentlest shot that still reaches.
+{
+  const near = solveLaunchAdaptive(118, 566, 700, 500, 520, 1100, G, true);
+  const far = solveLaunchAdaptive(118, 566, 1200, 540, 520, 1100, G, true);
+  check('adaptive solver hits a near target', !!near && simulate(118, 566, near.vx, near.vy, 700, 500) < 6);
+  check('adaptive solver hits a far target', !!far && simulate(118, 566, far.vx, far.vy, 1200, 540) < 6);
+  check('a nearer target is engaged with less speed',
+    Math.hypot(near.vx, near.vy) < Math.hypot(far.vx, far.vy),
+    );
+}
+
+// 17. Shots always travel toward the castle, never backwards off-screen.
+{
+  let ok = true;
+  for (let tx = 700; tx <= 1250; tx += 50) {
+    const s = solveLaunchAdaptive(118, 566, tx, 520, 520, 1100, G, true);
+    if (!s || s.vx <= 0) ok = false;
+  }
+  check('every solved shot flies toward the castle', ok);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -9,8 +9,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "npm run test:core",
-    "test:core": "esbuild tests/support.test.mjs --bundle --platform=node --format=esm --outfile=node_modules/.cache/support.test.bundle.mjs --log-level=error && node node_modules/.cache/support.test.bundle.mjs",
-    "test:sim": "node tests/sim.test.mjs"
+    "test:core": "esbuild tests/core.test.mjs --bundle --platform=node --format=esm --outfile=node_modules/.cache/core.test.bundle.mjs --log-level=error && node node_modules/.cache/core.test.bundle.mjs",
+    "test:sim": "node tests/sim.test.mjs && node tests/defend.test.mjs"
   },
   "repository": {
     "type": "git",

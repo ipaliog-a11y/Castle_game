@@ -1,0 +1,363 @@
+import Phaser from 'phaser';
+import { solveLaunchAdaptive } from '../core/ballistics';
+import { CardEngine, DEFENSE_DECK, type CardDef } from '../core/cards';
+import {
+  CANNON_X,
+  CANNON_Y,
+  CELL,
+  GRID_ROWS,
+  SIEGE_DURATION_MS,
+  WORLD_HEIGHT,
+  WORLD_WIDTH,
+  colToX,
+  rowToY,
+} from '../core/config';
+import type { PlayerSide } from '../core/store';
+import type { UnitId } from '../core/units';
+import { CardBar } from '../ui/CardBar';
+import { COLORS, FONT, hudButton, panel } from '../ui/theme';
+import { BALL_GRAVITY, BattleScene } from './BattleScene';
+
+/** How long the target marker shows before the shell is actually fired. */
+const TELEGRAPH_MS = 850;
+
+const AI_MIN_SPEED = 520;
+const AI_MAX_SPEED = 1100;
+
+/**
+ * Defence: an AI besieges the castle you built while you hold it with cards.
+ *
+ * The AI's pressure ramps across the battle — it reloads faster and aims
+ * tighter as time runs down — so surviving the last minute is meant to be the
+ * hard part. Every shot is telegraphed before it flies, which is what makes
+ * Masons and Boiling Oil reactive decisions rather than guesses.
+ */
+export class DefendScene extends BattleScene {
+  protected readonly playerSide: PlayerSide = 'defend';
+
+  private overlay!: Phaser.GameObjects.Graphics;
+  private cards!: CardEngine;
+  private cardBar!: CardBar;
+
+  private reloadTimer = 0;
+  private waveTimer = 0;
+  private telegraph: { x: number; y: number; at: number } | null = null;
+  private lastAngle = -0.6;
+  private wavesSent = 0;
+  private shotsFired = 0;
+  private reinforceUntil = 0;
+  private flashUntil = 0;
+
+  private timerText!: Phaser.GameObjects.Text;
+  private statusText!: Phaser.GameObjects.Text;
+  private pressureText!: Phaser.GameObjects.Text;
+
+  constructor() {
+    super('Defend');
+  }
+
+  create(): void {
+    this.bootBattle();
+    this.reloadTimer = 3200; // a moment to read the field before the first shot
+    this.waveTimer = 7000;
+    this.telegraph = null;
+    this.wavesSent = 0;
+    this.shotsFired = 0;
+    this.reinforceUntil = 0;
+    this.flashUntil = 0;
+
+    this.overlay = this.add.graphics().setDepth(20);
+    this.cards = new CardEngine(DEFENSE_DECK, { start: 5, regenPerSec: 0.62 });
+    this.buildHud();
+    this.bindInput();
+    this.view.draw();
+  }
+
+  // ------------------------------------------------------------------- ai
+
+  /** 0 at the opening, 1 by the final seconds. Drives the difficulty ramp. */
+  private pressure(): number {
+    return Phaser.Math.Clamp(1 - this.timeLeft / SIEGE_DURATION_MS, 0, 1);
+  }
+
+  private runAi(deltaMs: number): void {
+    const p = this.pressure();
+
+    // Resolve a telegraphed shot once its marker has had its moment.
+    if (this.telegraph && this.elapsed >= this.telegraph.at) {
+      this.fireAt(this.telegraph.x, this.telegraph.y);
+      this.telegraph = null;
+    }
+
+    this.reloadTimer -= deltaMs;
+    if (this.reloadTimer <= 0 && !this.telegraph) {
+      const target = this.pickTarget();
+      if (target) {
+        // Aim wanders less as the siege wears on.
+        const spread = 74 - 56 * p;
+        this.telegraph = {
+          x: target.x + Phaser.Math.FloatBetween(-spread, spread),
+          y: target.y + Phaser.Math.FloatBetween(-spread * 0.5, spread * 0.5),
+          at: this.elapsed + TELEGRAPH_MS,
+        };
+      }
+      this.reloadTimer = Phaser.Math.Between(2700 - 1500 * p, 3600 - 1800 * p);
+    }
+
+    this.waveTimer -= deltaMs;
+    if (this.waveTimer <= 0) {
+      this.sendWave(p);
+      this.waveTimer = Phaser.Math.Between(9000 - 3500 * p, 13000 - 5000 * p);
+    }
+  }
+
+  /**
+   * Prefers load-bearing blocks low in the structure — knocking those out
+   * drops everything above, which is the same tactic a human attacker learns.
+   *
+   * Only ever returns a point the cannon can actually reach. Height eats range
+   * badly, so the top of a tall keep may simply be unhittable; aiming there
+   * anyway would burn reloads on shots that never fire.
+   */
+  private pickTarget(): { x: number; y: number } | null {
+    const blocks = this.castle.all();
+    if (blocks.length === 0) return null;
+
+    const throne = this.castle.find('throne');
+    if (throne && Math.random() < 0.2) {
+      const at = { x: colToX(throne.col) + CELL / 2, y: rowToY(throne.row) + CELL / 2 };
+      if (this.solveFor(at.x, at.y)) return at;
+    }
+
+    // Score toward the bottom of the castle, then walk candidates best-first
+    // until one has a firing solution.
+    const ranked = blocks
+      .map((b) => ({
+        x: colToX(b.col) + CELL / 2,
+        y: rowToY(b.row) + CELL / 2,
+        score: b.row * 2 + Math.random() * GRID_ROWS,
+      }))
+      .sort((a, b) => b.score - a.score);
+
+    for (const cand of ranked) {
+      if (this.solveFor(cand.x, cand.y)) return { x: cand.x, y: cand.y };
+    }
+    return null;
+  }
+
+  /** Lobbed solution if possible, else a flat one. Null if out of reach. */
+  private solveFor(x: number, y: number) {
+    return (
+      solveLaunchAdaptive(
+        CANNON_X + 22,
+        CANNON_Y - 10,
+        x,
+        y,
+        AI_MIN_SPEED,
+        AI_MAX_SPEED,
+        BALL_GRAVITY,
+        // Lob shots clear the outer wall instead of burying themselves in it.
+        true,
+      ) ??
+      solveLaunchAdaptive(
+        CANNON_X + 22,
+        CANNON_Y - 10,
+        x,
+        y,
+        AI_MIN_SPEED,
+        AI_MAX_SPEED,
+        BALL_GRAVITY,
+        false,
+      )
+    );
+  }
+
+  private fireAt(x: number, y: number): void {
+    // Aim scatter can push the point out of reach; fall back to the clean shot.
+    const shot = this.solveFor(x, y);
+    if (!shot) return;
+    this.lastAngle = Math.atan2(shot.vy, shot.vx);
+    this.shotsFired++;
+    const heavy = Math.random() < 0.25 + this.pressure() * 0.25;
+    this.launch(shot.vx, shot.vy, heavy ? 110 : 62, heavy ? 1.9 : 1.25);
+  }
+
+  private sendWave(p: number): void {
+    const count = 1 + Math.round(p * 2);
+    for (let i = 0; i < count; i++) {
+      const id: UnitId = Math.random() < 0.35 + p * 0.2 ? 'sapper' : 'knight';
+      // Stagger arrivals so a wave trickles in rather than appearing at once.
+      this.time.delayedCall(i * 900, () => {
+        if (!this.finished) this.spawnUnit(id);
+      });
+    }
+    this.wavesSent++;
+    this.flash(`Wave ${this.wavesSent} incoming — ${count} attacker${count > 1 ? 's' : ''}.`);
+  }
+
+  // ---------------------------------------------------------------- cards
+
+  private bindInput(): void {
+    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
+      if (this.finished || this.cardBar.hits(p.x, p.y) || p.y < 52) return;
+      if (this.cardBar.armedSlot >= 0) {
+        this.resolveTargeted(this.cardBar.armedSlot, p.worldX, p.worldY);
+      }
+    });
+  }
+
+  private onCardPressed(slot: number, card: CardDef): void {
+    if (this.finished) return;
+    if (card.kind === 'targeted') {
+      if (!this.cards.canPlay(slot)) return;
+      this.cardBar.armedSlot = this.cardBar.armedSlot === slot ? -1 : slot;
+      this.flash(this.cardBar.armedSlot >= 0 ? `Tap where you want ${card.name}.` : '', true);
+      return;
+    }
+    const played = this.cards.play(slot);
+    if (!played) return;
+
+    if (played.id === 'reinforce') {
+      this.castleDamageMul = 0.6;
+      this.reinforceUntil = this.elapsed + 10_000;
+      this.flash('Reinforced — the walls hold firmer for 10 seconds.');
+    }
+  }
+
+  private resolveTargeted(slot: number, worldX: number, worldY: number): void {
+    const card = this.cards.hand[slot];
+    this.cardBar.armedSlot = -1;
+    if (!card) return;
+    const played = this.cards.play(slot);
+    if (!played) return;
+
+    if (played.id === 'repair') {
+      const healed = this.repairArea(worldX, worldY, played.radius ?? 2.5, 0.45);
+      this.flash(healed > 0 ? `Masons patched ${healed} block${healed > 1 ? 's' : ''}.` : 'Nothing damaged there.');
+    } else if (played.id === 'boilingOil') {
+      const hits = this.damageUnitsInRadius(worldX, worldY, played.radius ?? 2, 70);
+      this.flash(hits > 0 ? `Oil scalded ${hits} attacker${hits > 1 ? 's' : ''}.` : 'The oil hit nothing.');
+    }
+  }
+
+  // ----------------------------------------------------- battle callbacks
+
+  protected onTick(_dt: number, deltaMs: number): void {
+    this.cards.update(deltaMs);
+    if (this.reinforceUntil > 0 && this.elapsed >= this.reinforceUntil) {
+      this.reinforceUntil = 0;
+      this.castleDamageMul = 1;
+    }
+    this.runAi(deltaMs);
+  }
+
+  protected onDraw(): void {
+    this.drawOverlay();
+    this.refreshHud();
+  }
+
+  protected checkEnd(): boolean | null {
+    if (!this.castle.find('throne')) return true; // attacker won
+    if (this.timeLeft <= 0) return false; // you held
+    return null;
+  }
+
+  protected override cannonAngle(): number {
+    return this.lastAngle;
+  }
+
+  // -------------------------------------------------------------- drawing
+
+  private drawOverlay(): void {
+    const g = this.overlay;
+    g.clear();
+
+    // Incoming-shot marker: shrinks as the shot gets closer to firing.
+    if (this.telegraph) {
+      const remain = Phaser.Math.Clamp((this.telegraph.at - this.elapsed) / TELEGRAPH_MS, 0, 1);
+      const r = 14 + remain * 34;
+      g.lineStyle(2, 0xe5654f, 0.55 + (1 - remain) * 0.45);
+      g.strokeCircle(this.telegraph.x, this.telegraph.y, r);
+      g.lineStyle(1, 0xe5654f, 0.5);
+      g.beginPath();
+      g.moveTo(this.telegraph.x - r - 6, this.telegraph.y);
+      g.lineTo(this.telegraph.x + r + 6, this.telegraph.y);
+      g.moveTo(this.telegraph.x, this.telegraph.y - r - 6);
+      g.lineTo(this.telegraph.x, this.telegraph.y + r + 6);
+      g.strokePath();
+    }
+
+    if (this.cardBar.armedSlot >= 0) {
+      const card = this.cards.hand[this.cardBar.armedSlot];
+      const p = this.input.activePointer;
+      if (card?.radius) {
+        g.lineStyle(2, card.accent, 0.9);
+        g.strokeCircle(p.worldX, p.worldY, card.radius * CELL);
+      }
+    }
+  }
+
+  // ------------------------------------------------------------------ hud
+
+  private buildHud(): void {
+    const g = this.add.graphics().setDepth(40);
+    panel(g, 0, 0, WORLD_WIDTH, 52, COLORS.panel, COLORS.panelEdge, 0.96, 0);
+
+    this.add
+      .text(16, 26, 'HOLD THE KEEP', { fontFamily: FONT, fontSize: '18px', color: COLORS.text })
+      .setOrigin(0, 0.5)
+      .setDepth(41);
+    this.timerText = this.add
+      .text(200, 26, '', { fontFamily: FONT, fontSize: '18px', color: COLORS.text })
+      .setOrigin(0, 0.5)
+      .setDepth(41);
+    this.statusText = this.add
+      .text(310, 26, '', { fontFamily: FONT, fontSize: '15px', color: COLORS.dim })
+      .setOrigin(0, 0.5)
+      .setDepth(41);
+    this.pressureText = this.add
+      .text(WORLD_WIDTH - 190, 26, '', { fontFamily: FONT, fontSize: '15px', color: COLORS.dim })
+      .setOrigin(1, 0.5)
+      .setDepth(41);
+
+    hudButton(this, WORLD_WIDTH - 90, 26, 140, 34, 'Surrender', () => this.finishBattle(true));
+
+    this.cardBar = new CardBar(this, this.cards, 16, WORLD_HEIGHT - 104, (slot, card) =>
+      this.onCardPressed(slot, card),
+    );
+
+    this.add
+      .text(16, 76, 'Survive the siege. Red crosshairs mark incoming fire.', {
+        fontFamily: FONT,
+        fontSize: '13px',
+        color: COLORS.dim,
+      })
+      .setOrigin(0, 0.5)
+      .setDepth(41);
+  }
+
+  private flash(msg: string, sticky = false): void {
+    this.statusText.setText(msg);
+    this.flashUntil = msg ? (sticky ? Infinity : this.elapsed + 2600) : 0;
+  }
+
+  private refreshHud(): void {
+    const secs = Math.max(0, this.timeLeft / 1000);
+    this.timerText
+      .setText(`${Math.floor(secs / 60)}:${String(Math.floor(secs % 60)).padStart(2, '0')}`)
+      .setColor(secs < 30 ? COLORS.good : COLORS.text);
+
+    if (this.elapsed >= this.flashUntil) {
+      const throne = this.castle.find('throne');
+      this.statusText.setText(throne ? `Throne ${Math.max(0, Math.ceil(throne.hp))} hp` : '');
+    }
+
+    const p = this.pressure();
+    const bars = Math.round(p * 10);
+    this.pressureText
+      .setText(`Assault ${'|'.repeat(bars)}${'.'.repeat(10 - bars)}`)
+      .setColor(p > 0.66 ? COLORS.danger : COLORS.dim);
+
+    this.cardBar.refresh();
+  }
+}
