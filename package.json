@@ -1,0 +1,28 @@
+{
+  "name": "castle_game",
+  "version": "0.1.0",
+  "description": "A castle defense and offense game",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run test:core",
+    "test:core": "esbuild tests/support.test.mjs --bundle --platform=node --format=esm --outfile=node_modules/.cache/support.test.bundle.mjs --log-level=error && node node_modules/.cache/support.test.bundle.mjs",
+    "test:sim": "node tests/sim.test.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "http://local_proxy@127.0.0.1:41729/git/ipaliog-a11y/Castle_game"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "phaser": "^3.90.0"
+  },
+  "devDependencies": {
+    "playwright": "1.56.1",
+    "typescript": "^5.9.3",
+    "vite": "^5.4.21"
+  }
+}
