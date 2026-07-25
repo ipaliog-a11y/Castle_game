@@ -42,6 +42,12 @@ whole castle with Reinforce. The assault meter in the top right shows the AI
 ramping up — it reloads faster, aims tighter and sends bigger waves as the clock
 runs down. Survive to the final bell and the castle holds.
 
+**On a phone** — hold it in landscape if you can. If your screen is upright the
+whole game turns a quarter circle to fill it, so turn the phone clockwise to
+read it; that also means rotation lock does not stop you playing. Browser
+pinch-zoom is off on purpose — it fights drag-to-aim — but the picture already
+fills the screen, so there is nothing off-frame to zoom towards.
+
 **Lay siege** (offence) — drag anywhere to aim the cannon and release to fire;
 the dotted arc previews the shot and the ring shows power. Buy knights and
 sappers from the top bar. Play ability cards from the hand at the bottom left as
@@ -62,7 +68,9 @@ the ranges the cannon genuinely cannot reach.
 `test:sim` drives the real game in Chromium and asserts on live simulation
 state — unit pathing, collapse behaviour, the gold and cooldown economy, card
 effects, the attacker AI, defence card effects, and the win conditions for both
-sides. It writes screenshots to `tests/screenshots/`.
+sides. It writes screenshots to `tests/screenshots/`. It also covers the mobile
+fit: that the canvas fills a phone screen in either orientation, and that taps
+and drags land where they are aimed once the stage is rotated.
 It needs a Chromium; either run `npx playwright install chromium` or point
 `CHROMIUM_PATH` at an existing one.
 
