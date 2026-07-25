@@ -48,6 +48,35 @@ export function panel(
   g.strokeRoundedRect(x, y, w, h, radius);
 }
 
+/** Tappable HUD button. Swallows the tap so it never reaches the world. */
+export function hudButton(
+  scene: Phaser.Scene,
+  cx: number,
+  cy: number,
+  w: number,
+  h: number,
+  text: string,
+  onClick: () => void,
+): void {
+  const g = scene.add.graphics().setDepth(41);
+  panel(g, cx - w / 2, cy - h / 2, w, h, 0x1d2536, 0x5c6a8a, 0.95, 6);
+  scene.add
+    .text(cx, cy, text, { fontFamily: FONT, fontSize: '14px', color: COLORS.text })
+    .setOrigin(0.5)
+    .setDepth(42);
+  scene.add
+    .rectangle(cx, cy, w, h, 0, 0)
+    .setDepth(43)
+    .setInteractive({ useHandCursor: true })
+    .on(
+      'pointerdown',
+      (_p: Phaser.Input.Pointer, _x: number, _y: number, ev: Phaser.Types.Input.EventData) => {
+        ev.stopPropagation();
+        onClick();
+      },
+    );
+}
+
 /** Draws the sky, hills and ground shared by both modes. */
 export function drawBackdrop(
   scene: Phaser.Scene,

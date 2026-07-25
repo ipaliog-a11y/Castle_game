@@ -26,29 +26,42 @@ export class MenuScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    this.button(WORLD_WIDTH / 2, 300, 'BUILD YOUR CASTLE', 'Defence — spend your budget on walls', () =>
+    this.button(WORLD_WIDTH / 2, 276, 'BUILD YOUR CASTLE', 'Spend your budget on walls', () =>
       this.scene.start('Build'),
     );
 
-    const canSiege = store.hasCastle();
+    const canFight = store.hasCastle();
     this.button(
       WORLD_WIDTH / 2,
-      386,
-      'LAY SIEGE',
-      canSiege ? 'Offence — attack the castle you built' : 'Build a castle first',
+      352,
+      'HOLD THE KEEP',
+      canFight ? 'Defence — survive an AI siege with your cards' : 'Build a castle first',
       () => {
-        if (canSiege) this.scene.start('Siege');
+        if (canFight) this.scene.start('Defend');
       },
-      canSiege,
+      canFight,
+    );
+    this.button(
+      WORLD_WIDTH / 2,
+      428,
+      'LAY SIEGE',
+      canFight ? 'Offence — attack the castle you built' : 'Build a castle first',
+      () => {
+        if (canFight) this.scene.start('Siege');
+      },
+      canFight,
     );
 
     if (store.lastResult) {
       const r = store.lastResult;
-      const msg = r.attackerWon
-        ? `Last siege: throne fell in ${(r.msElapsed / 1000).toFixed(1)}s`
-        : `Last siege: the castle held with ${r.blocksLeft}/${r.blocksAtStart} blocks standing`;
+      const won = r.playerSide === 'defend' ? !r.attackerWon : r.attackerWon;
+      const msg = `Last battle: ${won ? 'victory' : 'defeat'} — ${
+        r.attackerWon
+          ? `throne fell in ${(r.msElapsed / 1000).toFixed(1)}s`
+          : `the castle held with ${r.blocksLeft}/${r.blocksAtStart} blocks standing`
+      }`;
       this.add
-        .text(WORLD_WIDTH / 2, 470, msg, { fontFamily: FONT, fontSize: '16px', color: COLORS.gold })
+        .text(WORLD_WIDTH / 2, 500, msg, { fontFamily: FONT, fontSize: '16px', color: COLORS.gold })
         .setOrigin(0.5);
     }
   }

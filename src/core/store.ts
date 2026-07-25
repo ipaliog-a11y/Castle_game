@@ -3,8 +3,12 @@ import { BUILD_BUDGET, THRONE_COL, THRONE_ROW } from './config';
 
 const STORAGE_KEY = 'siege-and-stone:castle:v1';
 
+export type PlayerSide = 'attack' | 'defend';
+
 export interface SiegeResult {
+  /** Who won the battle, independent of which side the human played. */
   attackerWon: boolean;
+  playerSide: PlayerSide;
   msElapsed: number;
   blocksLeft: number;
   blocksAtStart: number;

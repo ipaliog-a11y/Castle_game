@@ -77,7 +77,7 @@ export const CARDS: Record<string, CardDef> = {
     cost: 4,
     kind: 'targeted',
     radius: 2,
-    blurb: 'Scald every attacker in the tapped column.',
+    blurb: 'Scald attackers around the tapped point.',
     accent: 0xe07b2a,
   },
   reinforce: {
