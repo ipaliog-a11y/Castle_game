@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { FONT_SIZE } from './layout';
 
 export const COLORS = {
   skyTop: 0x1b2338,
@@ -61,7 +62,11 @@ export function hudButton(
   const g = scene.add.graphics().setDepth(41);
   panel(g, cx - w / 2, cy - h / 2, w, h, 0x1d2536, 0x5c6a8a, 0.95, 6);
   scene.add
-    .text(cx, cy, text, { fontFamily: FONT, fontSize: '14px', color: COLORS.text })
+    .text(cx, cy, text, {
+      fontFamily: FONT,
+      fontSize: `${FONT_SIZE.small}px`,
+      color: COLORS.text,
+    })
     .setOrigin(0.5)
     .setDepth(42);
   scene.add

@@ -3,6 +3,13 @@ import { MATERIALS, type MaterialId } from './materials';
 
 export type DamageKind = 'blast' | 'melee' | 'impact';
 
+export interface DamageResult {
+  /** Hitpoints actually removed, after resistance and capped at what was left. */
+  applied: number;
+  /** The block, if this hit finished it off. */
+  killed: Block | null;
+}
+
 export interface Block {
   col: number;
   row: number;
@@ -84,16 +91,24 @@ export class Castle {
    * are per material and per damage kind, so stone shrugs off swords while
    * timber burns down under them.
    */
-  damage(block: Block, amount: number, kind: DamageKind): Block | null {
+  /**
+   * Applies damage after the material's resistance to that kind of hit.
+   *
+   * Returns what actually landed, not what was asked for: the HUD reports the
+   * number the player sees, and resistances are the whole point of choosing a
+   * material, so the two must not be able to drift apart.
+   */
+  damage(block: Block, amount: number, kind: DamageKind): DamageResult {
     const def = MATERIALS[block.mat];
     const mult =
       kind === 'blast' ? def.blastResist : kind === 'melee' ? def.meleeResist : 1;
+    const applied = Math.min(block.hp, amount * mult);
     block.hp -= amount * mult;
     if (block.hp <= 0) {
       this.remove(block.col, block.row);
-      return block;
+      return { applied, killed: block };
     }
-    return null;
+    return { applied, killed: null };
   }
 
   /**
@@ -192,9 +207,18 @@ export class Castle {
     };
   }
 
+  /**
+   * Blocks that no longer make sense are skipped rather than thrown on. A save
+   * naming a material or a cell this version does not have should cost the
+   * player that block, not the whole castle and a black screen — and renaming a
+   * material or reshaping the grid is exactly the sort of thing a later
+   * milestone does.
+   */
   static deserialize(save: CastleSave): Castle {
     const castle = new Castle();
     for (const [col, row, mat, hpFrac] of save.blocks) {
+      if (!MATERIALS[mat]) continue;
+      if (!castle.inBounds(col, row)) continue;
       castle.place(col, row, mat, hpFrac ?? 1);
     }
     return castle;

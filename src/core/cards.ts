@@ -36,7 +36,7 @@ export const CARDS: Record<string, CardDef> = {
     side: 'offense',
     cost: 4,
     kind: 'arm',
-    blurb: 'Next shot hits far harder in a wide blast.',
+    blurb: 'Next shot hits harder, in a wider blast.',
     accent: 0xd6483a,
   },
   sapperCharge: {
@@ -46,7 +46,7 @@ export const CARDS: Record<string, CardDef> = {
     cost: 5,
     kind: 'targeted',
     radius: 1.6,
-    blurb: 'Blow a hole straight through a wall you tap.',
+    blurb: 'Blows a hole through the wall you tap.',
     accent: 0xb8452f,
   },
   rally: {
@@ -55,7 +55,7 @@ export const CARDS: Record<string, CardDef> = {
     side: 'offense',
     cost: 3,
     kind: 'instant',
-    blurb: 'Knights move and hit harder for 8 seconds.',
+    blurb: 'Troops move and hit harder for 8s.',
     accent: 0xc9a227,
   },
   // Defined and ready for the defence-vs-AI level; not dealt in the siege
@@ -67,7 +67,7 @@ export const CARDS: Record<string, CardDef> = {
     cost: 3,
     kind: 'targeted',
     radius: 2.5,
-    blurb: 'Restore damaged blocks around the tapped point.',
+    blurb: 'Repairs damaged blocks around your tap.',
     accent: 0x4f9d69,
   },
   boilingOil: {
@@ -77,7 +77,7 @@ export const CARDS: Record<string, CardDef> = {
     cost: 4,
     kind: 'targeted',
     radius: 2,
-    blurb: 'Scald attackers around the tapped point.',
+    blurb: 'Scalds attackers around your tap.',
     accent: 0xe07b2a,
   },
   reinforce: {
@@ -86,7 +86,7 @@ export const CARDS: Record<string, CardDef> = {
     side: 'defense',
     cost: 5,
     kind: 'instant',
-    blurb: 'Castle takes 40% less damage for 10 seconds.',
+    blurb: 'Castle takes 40% less damage, for 10s.',
     accent: 0x6b7f9e,
   },
 };
@@ -110,8 +110,10 @@ export class CardEngine {
   ) {
     this.handSize = opts.handSize ?? 3;
     this.energyMax = opts.energyMax ?? 10;
-    this.regenPerSec = opts.regenPerSec ?? 0.55;
-    this.energy = opts.start ?? 4;
+    // Halving the clock halves how many cards a battle can afford, so regen
+    // roughly doubled to keep a hand worth holding rather than hoarding.
+    this.regenPerSec = opts.regenPerSec ?? 1.0;
+    this.energy = opts.start ?? 5;
 
     // Two copies of each card keeps the draw varied without a real collection.
     for (const id of deckIds) {

@@ -19,7 +19,7 @@ import { MATERIALS, type MaterialId } from '../core/materials';
 import { store, type PlayerSide } from '../core/store';
 import { UNITS, type UnitDef, type UnitId } from '../core/units';
 import { CastleView } from '../ui/CastleView';
-import { drawBackdrop } from '../ui/theme';
+import { FONT, drawBackdrop } from '../ui/theme';
 
 export const BALL_GRAVITY = 900;
 const DEBRIS_GRAVITY = 1150;
@@ -54,6 +54,8 @@ export interface Unit {
   vy: number;
   hp: number;
   swing: number;
+  /** Melee damage banked since the last swing, so numbers batch per blow. */
+  dealt: number;
 }
 
 interface Particle {
@@ -67,6 +69,24 @@ interface Particle {
   color: number;
 }
 
+/** A damage number drifting up from where a hit landed. */
+interface Floater {
+  x: number;
+  y: number;
+  life: number;
+  text: string;
+  color: string;
+  size: number;
+}
+
+/**
+ * Damage numbers are drawn through a fixed pool of Text objects. Creating a
+ * Text per hit would allocate during the busiest frames of the battle — a
+ * cannonball landing in a wall can damage a dozen blocks at once.
+ */
+const FLOATER_POOL = 14;
+const FLOATER_LIFE = 1.05;
+
 /**
  * Everything both battle modes share: the castle, projectiles, falling debris,
  * advancing troops, and how all of those hurt each other.
@@ -79,11 +99,15 @@ export abstract class BattleScene extends Phaser.Scene {
   protected castle!: Castle;
   protected view!: CastleView;
   protected fx!: Phaser.GameObjects.Graphics;
+  /** Shells and their trails, drawn above the HUD so the card bar never hides one. */
+  private ballFx!: Phaser.GameObjects.Graphics;
 
   protected balls: Ball[] = [];
   protected debris: Debris[] = [];
   protected units: Unit[] = [];
   protected particles: Particle[] = [];
+  protected floaters: Floater[] = [];
+  private floaterPool: Phaser.GameObjects.Text[] = [];
 
   protected timeLeft = SIEGE_DURATION_MS;
   /**
@@ -121,6 +145,7 @@ export abstract class BattleScene extends Phaser.Scene {
     this.debris = [];
     this.units = [];
     this.particles = [];
+    this.floaters = [];
     this.timeLeft = SIEGE_DURATION_MS;
     this.elapsed = 0;
     this.finished = false;
@@ -130,6 +155,19 @@ export abstract class BattleScene extends Phaser.Scene {
     drawBackdrop(this, WORLD_WIDTH, WORLD_HEIGHT, GROUND_Y);
     this.view = new CastleView(this, this.castle, 5);
     this.fx = this.add.graphics().setDepth(10);
+    // Above the card bar: a shell in flight must never be hidden by the HUD.
+    this.ballFx = this.add.graphics().setDepth(56);
+
+    this.floaterPool = [];
+    for (let i = 0; i < FLOATER_POOL; i++) {
+      this.floaterPool.push(
+        this.add
+          .text(0, 0, '', { fontFamily: FONT, fontSize: '24px', color: '#ffffff' })
+          .setOrigin(0.5)
+          .setDepth(57)
+          .setVisible(false),
+      );
+    }
   }
 
   // ------------------------------------------------------------- main loop
@@ -147,6 +185,7 @@ export abstract class BattleScene extends Phaser.Scene {
     this.updateDebris(dt);
     this.updateUnits(dt);
     this.updateParticles(dt);
+    this.updateFloaters(dt);
 
     this.view.draw();
     this.drawFx();
@@ -206,6 +245,7 @@ export abstract class BattleScene extends Phaser.Scene {
     const centerRow = yToRow(y);
     const reach = Math.ceil(radiusCells);
     const destroyed: Block[] = [];
+    let dealt = 0;
 
     for (let dc = -reach; dc <= reach; dc++) {
       for (let dr = -reach; dr <= reach; dr++) {
@@ -216,19 +256,23 @@ export abstract class BattleScene extends Phaser.Scene {
         const distCells = Math.hypot(bx - x, by - y) / CELL;
         if (distCells > radiusCells) continue;
         const falloff = 1 - (distCells / radiusCells) * 0.65;
-        const killed = this.castle.damage(
+        const hit = this.castle.damage(
           block,
           damage * falloff * this.castleDamageMul,
           'blast',
         );
-        if (killed) destroyed.push(killed);
+        dealt += hit.applied;
+        if (hit.killed) destroyed.push(hit.killed);
       }
     }
 
     // Troops standing in the blast take a share of it too.
     for (const unit of this.units) {
       const d = Math.hypot(unit.x - x, unit.feetY - unit.def.height / 2 - y) / CELL;
-      if (d <= radiusCells) unit.hp -= damage * 0.4 * (1 - d / radiusCells);
+      if (d > radiusCells) continue;
+      const toUnit = damage * 0.4 * (1 - d / radiusCells);
+      unit.hp -= toUnit;
+      dealt += toUnit;
     }
 
     for (const block of destroyed) {
@@ -241,6 +285,7 @@ export abstract class BattleScene extends Phaser.Scene {
       );
     }
     this.burst(x, y, 16, 0xffd08a, 220);
+    this.reportHit(x, y, dealt, destroyed.length);
     this.cameras.main.shake(Math.min(220, 60 + damage), 0.002 + Math.min(0.006, damage / 40000));
     this.collapse();
   }
@@ -291,7 +336,10 @@ export abstract class BattleScene extends Phaser.Scene {
 
         // Whatever it landed on takes the impact as well.
         const below = this.castle.get(col, restRow + 1);
-        if (below) this.castle.damage(below, impact * 0.8, 'impact');
+        if (below) {
+          const hit = this.castle.damage(below, impact * 0.8, 'impact');
+          this.reportHit(d.x + CELL / 2, restY, hit.applied, hit.killed ? 1 : 0);
+        }
 
         if (d.hp > 0 && restRow < GRID_ROWS && !this.castle.has(col, restRow)) {
           this.castle.place(col, restRow, d.mat, d.hp / d.maxHp);
@@ -316,6 +364,7 @@ export abstract class BattleScene extends Phaser.Scene {
       vy: 0,
       hp: def.hp,
       swing: 0,
+      dealt: 0,
     };
     this.units.push(unit);
     return unit;
@@ -359,14 +408,24 @@ export abstract class BattleScene extends Phaser.Scene {
           u.x = Math.max(u.x + u.def.speed * speedMul * dt, colToX(aheadCol) + 2);
           u.feetY = rowToY(feetRow);
         } else {
-          this.castle.damage(
+          const hit = this.castle.damage(
             blocking,
             u.def.dps * dpsMul * dt * this.castleDamageMul,
             'melee',
           );
+          // Melee is continuous, so it is batched into one number per swing
+          // rather than one per frame, which would be unreadable.
+          u.dealt += hit.applied;
           if (u.swing <= 0) {
             u.swing = 0.45;
             this.burst(colToX(aheadCol), u.feetY - u.def.height * 0.5, 3, 0xffe9a8, 90);
+            this.reportHit(
+              colToX(aheadCol),
+              u.feetY - u.def.height,
+              u.dealt,
+              hit.killed ? 1 : 0,
+            );
+            u.dealt = 0;
           }
           if (!this.castle.has(aheadCol, feetRow)) this.collapse();
         }
@@ -425,6 +484,62 @@ export abstract class BattleScene extends Phaser.Scene {
       }
     }
     return healed;
+  }
+
+  // ------------------------------------------------------- damage readout
+
+  /**
+   * Floats the damage a hit actually did above where it landed.
+   *
+   * One number per impact rather than one per block: a shell landing in a wall
+   * damages everything in its radius, and a dozen numbers racing each other
+   * tells you less than a single total. Blocks broken are appended, because
+   * that is the part you are actually trying to achieve.
+   */
+  protected reportHit(x: number, y: number, dealt: number, broken: number): void {
+    if (dealt < 1) return;
+    const heavy = dealt >= 90;
+    this.floaters.push({
+      x,
+      y,
+      life: FLOATER_LIFE,
+      text: broken > 0 ? `${Math.round(dealt)}  −${broken}` : `${Math.round(dealt)}`,
+      color: broken > 0 ? '#ffd08a' : heavy ? '#ffb562' : '#e7ecf5',
+      size: heavy || broken > 0 ? 28 : 22,
+    });
+    // Oldest first, so a busy moment drops stale numbers rather than new ones.
+    if (this.floaters.length > FLOATER_POOL) this.floaters.shift();
+  }
+
+  private updateFloaters(dt: number): void {
+    for (let i = this.floaters.length - 1; i >= 0; i--) {
+      const f = this.floaters[i];
+      f.life -= dt;
+      if (f.life <= 0) {
+        this.floaters.splice(i, 1);
+        continue;
+      }
+      f.y -= 42 * dt;
+    }
+
+    for (let i = 0; i < this.floaterPool.length; i++) {
+      const text = this.floaterPool[i];
+      const f = this.floaters[i];
+      if (!f) {
+        text.setVisible(false);
+        continue;
+      }
+      const t = f.life / FLOATER_LIFE;
+      text
+        .setVisible(true)
+        .setPosition(f.x, f.y)
+        .setText(f.text)
+        .setColor(f.color)
+        .setFontSize(f.size)
+        // Hold full opacity for the first half, then fade, so short-lived
+        // numbers are still readable at a glance.
+        .setAlpha(Phaser.Math.Clamp(t * 2, 0, 1));
+    }
   }
 
   // ------------------------------------------------------------ particles
@@ -515,21 +630,25 @@ export abstract class BattleScene extends Phaser.Scene {
       }
     }
 
-    for (const b of this.balls) {
-      for (let i = 0; i < b.trail.length; i += 2) {
-        const t = i / Math.max(2, b.trail.length);
-        g.fillStyle(0xffb562, t * 0.5);
-        g.fillCircle(b.trail[i], b.trail[i + 1], 2 + t * 3);
-      }
-      g.fillStyle(0x2a2f3d, 1);
-      g.fillCircle(b.x, b.y, 7);
-      g.fillStyle(0xffd08a, 0.9);
-      g.fillCircle(b.x - 2, b.y - 2, 3);
-    }
-
     for (const p of this.particles) {
       g.fillStyle(p.color, Phaser.Math.Clamp(p.life / p.maxLife, 0, 1));
       g.fillRect(p.x, p.y, p.size, p.size);
+    }
+
+    // Shells go on their own layer, above the HUD, so a shot crossing the card
+    // bar stays visible — losing sight of one mid-flight makes aiming guesswork.
+    const gb = this.ballFx;
+    gb.clear();
+    for (const b of this.balls) {
+      for (let i = 0; i < b.trail.length; i += 2) {
+        const t = i / Math.max(2, b.trail.length);
+        gb.fillStyle(0xffb562, t * 0.5);
+        gb.fillCircle(b.trail[i], b.trail[i + 1], 2 + t * 3);
+      }
+      gb.fillStyle(0x2a2f3d, 1);
+      gb.fillCircle(b.x, b.y, 7);
+      gb.fillStyle(0xffd08a, 0.9);
+      gb.fillCircle(b.x - 2, b.y - 2, 3);
     }
   }
 

@@ -7,7 +7,6 @@ import {
   CELL,
   GRID_ROWS,
   SIEGE_DURATION_MS,
-  WORLD_HEIGHT,
   WORLD_WIDTH,
   colToX,
   rowToY,
@@ -15,6 +14,7 @@ import {
 import type { PlayerSide } from '../core/store';
 import type { UnitId } from '../core/units';
 import { CardBar } from '../ui/CardBar';
+import { BUTTON, FONT_SIZE, TOP_BAR_H } from '../ui/layout';
 import { COLORS, FONT, hudButton, panel } from '../ui/theme';
 import { BALL_GRAVITY, BattleScene } from './BattleScene';
 
@@ -58,16 +58,18 @@ export class DefendScene extends BattleScene {
 
   create(): void {
     this.bootBattle();
-    this.reloadTimer = 3200; // a moment to read the field before the first shot
-    this.waveTimer = 7000;
+    this.reloadTimer = 2000; // a moment to read the field before the first shot
+    this.waveTimer = 4200;
     this.telegraph = null;
     this.wavesSent = 0;
     this.shotsFired = 0;
     this.reinforceUntil = 0;
     this.flashUntil = 0;
 
-    this.overlay = this.add.graphics().setDepth(20);
-    this.cards = new CardEngine(DEFENSE_DECK, { start: 5, regenPerSec: 0.62 });
+    // Above the card column, so a targeting circle dragged over the hand is
+    // still visible where it matters.
+    this.overlay = this.add.graphics().setDepth(55);
+    this.cards = new CardEngine(DEFENSE_DECK, { start: 6, regenPerSec: 1.15 });
     this.buildHud();
     this.bindInput();
     this.view.draw();
@@ -101,13 +103,13 @@ export class DefendScene extends BattleScene {
           at: this.elapsed + TELEGRAPH_MS,
         };
       }
-      this.reloadTimer = Phaser.Math.Between(2700 - 1500 * p, 3600 - 1800 * p);
+      this.reloadTimer = Phaser.Math.Between(1900 - 1000 * p, 2600 - 1300 * p);
     }
 
     this.waveTimer -= deltaMs;
     if (this.waveTimer <= 0) {
       this.sendWave(p);
-      this.waveTimer = Phaser.Math.Between(9000 - 3500 * p, 13000 - 5000 * p);
+      this.waveTimer = Phaser.Math.Between(5200 - 2000 * p, 7600 - 3000 * p);
     }
   }
 
@@ -187,7 +189,7 @@ export class DefendScene extends BattleScene {
     for (let i = 0; i < count; i++) {
       const id: UnitId = Math.random() < 0.35 + p * 0.2 ? 'sapper' : 'knight';
       // Stagger arrivals so a wave trickles in rather than appearing at once.
-      this.time.delayedCall(i * 900, () => {
+      this.time.delayedCall(i * 650, () => {
         if (!this.finished) this.spawnUnit(id);
       });
     }
@@ -199,7 +201,7 @@ export class DefendScene extends BattleScene {
 
   private bindInput(): void {
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      if (this.finished || this.cardBar.hits(p.x, p.y) || p.y < 52) return;
+      if (this.finished || this.cardBar.hits(p.x, p.y) || p.y < TOP_BAR_H) return;
       if (this.cardBar.armedSlot >= 0) {
         this.resolveTargeted(this.cardBar.armedSlot, p.worldX, p.worldY);
       }
@@ -301,38 +303,57 @@ export class DefendScene extends BattleScene {
 
   private buildHud(): void {
     const g = this.add.graphics().setDepth(40);
-    panel(g, 0, 0, WORLD_WIDTH, 52, COLORS.panel, COLORS.panelEdge, 0.96, 0);
+    panel(g, 0, 0, WORLD_WIDTH, TOP_BAR_H, COLORS.panel, COLORS.panelEdge, 0.96, 0);
 
+    const midY = TOP_BAR_H / 2;
     this.add
-      .text(16, 26, 'HOLD THE KEEP', { fontFamily: FONT, fontSize: '18px', color: COLORS.text })
+      .text(18, midY, 'HOLD THE KEEP', {
+        fontFamily: FONT,
+        fontSize: `${FONT_SIZE.headline}px`,
+        color: COLORS.text,
+      })
       .setOrigin(0, 0.5)
       .setDepth(41);
     this.timerText = this.add
-      .text(200, 26, '', { fontFamily: FONT, fontSize: '18px', color: COLORS.text })
+      .text(250, midY, '', {
+        fontFamily: FONT,
+        fontSize: `${FONT_SIZE.headline}px`,
+        color: COLORS.text,
+      })
       .setOrigin(0, 0.5)
       .setDepth(41);
     this.statusText = this.add
-      .text(310, 26, '', { fontFamily: FONT, fontSize: '15px', color: COLORS.dim })
-      .setOrigin(0, 0.5)
-      .setDepth(41);
-    this.pressureText = this.add
-      .text(WORLD_WIDTH - 190, 26, '', { fontFamily: FONT, fontSize: '15px', color: COLORS.dim })
-      .setOrigin(1, 0.5)
-      .setDepth(41);
-
-    hudButton(this, WORLD_WIDTH - 90, 26, 140, 34, 'Surrender', () => this.finishBattle(true));
-
-    this.cardBar = new CardBar(this, this.cards, 16, WORLD_HEIGHT - 104, (slot, card) =>
-      this.onCardPressed(slot, card),
-    );
-
-    this.add
-      .text(16, 76, 'Survive the siege. Red crosshairs mark incoming fire.', {
+      .text(360, midY, '', {
         fontFamily: FONT,
-        fontSize: '13px',
+        fontSize: `${FONT_SIZE.body}px`,
         color: COLORS.dim,
       })
       .setOrigin(0, 0.5)
+      .setDepth(41);
+    this.pressureText = this.add
+      .text(WORLD_WIDTH - 216, midY, '', {
+        fontFamily: FONT,
+        fontSize: `${FONT_SIZE.body}px`,
+        color: COLORS.dim,
+      })
+      .setOrigin(1, 0.5)
+      .setDepth(41);
+
+    hudButton(this, WORLD_WIDTH - 106, midY, BUTTON.w, BUTTON.h, 'Surrender', () =>
+      this.finishBattle(true),
+    );
+
+    this.cardBar = new CardBar(this, this.cards, (slot, card) => this.onCardPressed(slot, card));
+
+    // Clear of the card column, which owns the left edge below the bar.
+    this.add
+      .text(
+        WORLD_WIDTH / 2 + 80,
+        TOP_BAR_H + 26,
+        'Survive the siege. Red crosshairs mark incoming fire.',
+        { fontFamily: FONT, fontSize: `${FONT_SIZE.small}px`, color: COLORS.dim },
+      )
+      .setOrigin(0.5)
       .setDepth(41);
   }
 
