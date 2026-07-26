@@ -29,7 +29,15 @@ export const CANNON_Y = GROUND_Y - 24;
 export const SPAWN_X = 40;
 
 export const BUILD_BUDGET = 900;
-export const SIEGE_DURATION_MS = 180_000;
+
+/**
+ * A battle is 90 seconds. Three minutes left too much of the middle as waiting:
+ * the economy paid out faster than it could be spent and the AI's pressure ramp
+ * crawled. Everything timed against the clock was rescaled to match — income,
+ * energy regen, AI reloads and wave spacing — so this constant cannot be changed
+ * on its own without re-tuning `units.ts`, `cards.ts` and `DefendScene`.
+ */
+export const SIEGE_DURATION_MS = 90_000;
 
 export function colToX(col: number): number {
   return GRID_ORIGIN_X + col * CELL;

@@ -5,7 +5,6 @@ import {
   CANNON_Y,
   CELL,
   GROUND_Y,
-  WORLD_HEIGHT,
   WORLD_WIDTH,
   xToCol,
   yToRow,
@@ -21,6 +20,7 @@ import {
   type UnitId,
 } from '../core/units';
 import { CardBar } from '../ui/CardBar';
+import { BUTTON, FONT_SIZE, TOP_BAR_H } from '../ui/layout';
 import { COLORS, FONT, hudButton, panel } from '../ui/theme';
 import { BALL_GRAVITY, BattleScene } from './BattleScene';
 
@@ -63,7 +63,9 @@ export class SiegeScene extends BattleScene {
     this.aiming = false;
     this.flashUntil = 0;
 
-    this.aimG = this.add.graphics().setDepth(20);
+    // Above the card column: the aim arc is the whole interface, and the
+    // moment it disappears behind a card the shot becomes a guess.
+    this.aimG = this.add.graphics().setDepth(55);
     this.cards = new CardEngine(OFFENSE_DECK);
     this.buildHud();
     this.bindInput();
@@ -74,7 +76,7 @@ export class SiegeScene extends BattleScene {
 
   private bindInput(): void {
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      if (this.finished || this.cardBar.hits(p.x, p.y) || p.y < 52) return;
+      if (this.finished || this.cardBar.hits(p.x, p.y) || p.y < TOP_BAR_H) return;
 
       if (this.cardBar.armedSlot >= 0) {
         this.resolveTargeted(this.cardBar.armedSlot, p.worldX, p.worldY);
@@ -254,44 +256,60 @@ export class SiegeScene extends BattleScene {
 
   private buildHud(): void {
     const g = this.add.graphics().setDepth(40);
-    panel(g, 0, 0, WORLD_WIDTH, 52, COLORS.panel, COLORS.panelEdge, 0.96, 0);
+    panel(g, 0, 0, WORLD_WIDTH, TOP_BAR_H, COLORS.panel, COLORS.panelEdge, 0.96, 0);
 
+    const midY = TOP_BAR_H / 2;
     this.goldText = this.add
-      .text(16, 26, '', { fontFamily: FONT, fontSize: '18px', color: COLORS.gold })
+      .text(18, midY, '', {
+        fontFamily: FONT,
+        fontSize: `${FONT_SIZE.headline}px`,
+        color: COLORS.gold,
+      })
       .setOrigin(0, 0.5)
       .setDepth(41);
     this.timerText = this.add
-      .text(200, 26, '', { fontFamily: FONT, fontSize: '18px', color: COLORS.text })
+      .text(190, midY, '', {
+        fontFamily: FONT,
+        fontSize: `${FONT_SIZE.headline}px`,
+        color: COLORS.text,
+      })
       .setOrigin(0, 0.5)
       .setDepth(41);
     this.statusText = this.add
-      .text(340, 26, '', { fontFamily: FONT, fontSize: '15px', color: COLORS.dim })
-      .setOrigin(0, 0.5)
-      .setDepth(41);
-    this.modText = this.add
-      .text(WORLD_WIDTH / 2, 72, '', { fontFamily: FONT, fontSize: '15px', color: COLORS.gold })
-      .setOrigin(0.5)
-      .setDepth(41);
-
-    hudButton(this, WORLD_WIDTH - 350, 26, 150, 34, `Knight  ${UNITS.knight.gold}g`, () =>
-      this.deploy('knight'),
-    );
-    hudButton(this, WORLD_WIDTH - 190, 26, 150, 34, `Sapper  ${UNITS.sapper.gold}g`, () =>
-      this.deploy('sapper'),
-    );
-    hudButton(this, WORLD_WIDTH - 70, 78, 110, 28, 'Give up', () => this.finishBattle(false));
-
-    this.cardBar = new CardBar(this, this.cards, 16, WORLD_HEIGHT - 104, (slot, card) =>
-      this.onCardPressed(slot, card),
-    );
-
-    this.add
-      .text(16, 76, 'Drag anywhere to aim — release to fire.', {
+      .text(300, midY, '', {
         fontFamily: FONT,
-        fontSize: '13px',
+        fontSize: `${FONT_SIZE.body}px`,
         color: COLORS.dim,
       })
       .setOrigin(0, 0.5)
+      .setDepth(41);
+    // Sits clear of the card column, which owns the left edge below the bar.
+    this.modText = this.add
+      .text(WORLD_WIDTH / 2 + 80, TOP_BAR_H + 26, '', {
+        fontFamily: FONT,
+        fontSize: `${FONT_SIZE.small}px`,
+        color: COLORS.gold,
+      })
+      .setOrigin(0.5)
+      .setDepth(41);
+
+    hudButton(this, 720, midY, BUTTON.w, BUTTON.h, `Knight ${UNITS.knight.gold}g`, () =>
+      this.deploy('knight'),
+    );
+    hudButton(this, 926, midY, BUTTON.w, BUTTON.h, `Sapper ${UNITS.sapper.gold}g`, () =>
+      this.deploy('sapper'),
+    );
+    hudButton(this, 1160, midY, 180, BUTTON.h, 'Give up', () => this.finishBattle(false));
+
+    this.cardBar = new CardBar(this, this.cards, (slot, card) => this.onCardPressed(slot, card));
+
+    this.add
+      .text(WORLD_WIDTH / 2 + 80, TOP_BAR_H + 54, 'Drag anywhere to aim — release to fire.', {
+        fontFamily: FONT,
+        fontSize: `${FONT_SIZE.small}px`,
+        color: COLORS.dim,
+      })
+      .setOrigin(0.5)
       .setDepth(41);
   }
 

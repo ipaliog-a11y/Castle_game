@@ -75,7 +75,7 @@ yourself or hold it against an AI besieger.
 - Blast damage with radial falloff and per-material blast/melee resistances —
   stone shrugs off swords, timber does not; iron shrugs off cannon fire
 - Four offence cards on an energy economy with draw/discard/reshuffle
-- Win by destroying the throne; lose on the 3-minute timer
+- Win by destroying the throne; lose when the 90-second clock runs out
 
 **Defence (holding the keep) — milestone 2**
 - An AI besieges the castle you built while you hold it with the defence deck
@@ -85,6 +85,14 @@ yourself or hold it against an AI besieger.
   AI reloads faster, aims tighter, sends bigger waves and lobs heavier shot
 - Win by surviving the timer; lose the moment the throne falls — the inverse of
   the siege, resolved from the same battle outcome
+
+**Reading the battle**
+- Every hit floats the damage it actually did, after the target material's
+  resistance, and the count of blocks it brought down. One number per impact,
+  not one per block: a shell landing in a wall hits everything in its radius,
+  and a dozen numbers racing each other tells you less than a total
+- Shells and the aim arc draw *above* the HUD. Losing sight of a shot mid-flight
+  turns aiming into guesswork, so nothing is allowed to cover one
 
 **Cards implemented**
 
@@ -135,6 +143,33 @@ game time ran at roughly a third of wall clock under headless rendering, which
 would have quietly shrunk the telegraph warning window relative to the battle on
 exactly the weak devices that drop frames.
 
+## Where the HUD is allowed to be
+
+The battlefield is crowded, and the HUD had been placed without regard for it:
+
+```
+  x 0                                                            1280
+    ├─ cannon ─┤                                ├──── castle ────────┤
+    0        150                              640                  1248
+```
+
+The cannon owns the bottom left, the castle owns the right, and troops march
+along the ground between them. A hand of cards along the bottom sat directly on
+top of the gun — you could not see the thing you were aiming. Moving it into the
+sky was no better, because that is where the shot arc lives.
+
+What is left is the left *column*: above the cannon, clear of the castle, and
+above the heads of marching troops. So the hand is vertical, and it stops short
+of the gun — not of the carriage, but of the muzzle at full elevation, which is
+the part you read when you aim. `assertCardBarClearsCannon` fails at boot rather
+than letting a taller card or a fourth slot quietly cover the barrel again.
+
+Sizes are in `src/ui/layout.ts` and are chosen against the phone, not the
+desktop. Fitted to a 390px screen a world pixel is about **0.65 CSS pixels**, so
+the old 13px HUD text rendered at 8.5 — a smudge. The floor is now 18 world
+pixels, about 12 on screen, asserted by `tests/viewport.test.mjs` so a future
+tweak cannot quietly reintroduce it.
+
 ## Fitting a landscape world onto a phone
 
 The world is a fixed 1280×600 — 2.13:1, near enough to a phone held sideways.
@@ -184,10 +219,23 @@ milestone 4 has been retired.
 ## Balance notes
 
 Numbers live in `src/core/materials.ts` and `src/core/units.ts` and are meant to
-be edited. Current tuning is a first pass, not a balanced game. Known soft spots:
+be edited. Current tuning is a first pass, not a balanced game.
+
+A battle is **90 seconds**. It was three minutes, and the middle was waiting:
+the economy paid out faster than it could be spent and the AI's ramp crawled.
+Halving the clock meant rescaling everything measured against it — gold income
+roughly doubled, the gold cap came *down* so banking cannot replace playing,
+card energy regen roughly doubled, and the AI's reloads and wave spacing
+tightened. Those are arithmetic, not evidence: `SIEGE_DURATION_MS` cannot be
+changed on its own without walking the same list again.
+
+Known soft spots:
 
 - Iron is very strong against cannon fire (0.55×) and melee (0.3×); at 45g it
   may simply be the correct answer everywhere once you can afford it.
-- The march across open ground takes roughly 9 seconds. That is deliberate time
-  for the cannon to work, but it is the first thing to shorten if it drags.
-- The 3-minute timer has not been tested against a genuinely good castle.
+- The march across open ground takes roughly 7 seconds — a twelfth of the battle
+  now rather than a twentieth. Deliberate time for the cannon to work, but the
+  first thing to shorten if it drags.
+- No archetype has been tested against the shorter clock. Whether 90 seconds is
+  long enough to break a good castle, or short enough to make defence a
+  formality, is unmeasured — see the balance harness in ROADMAP.md.

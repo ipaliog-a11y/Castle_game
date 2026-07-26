@@ -26,15 +26,22 @@ The whole of this milestone changes numbers, timing and presentation. It adds no
 new verbs. Its purpose is to answer one question: **is this fun for ten minutes,
 on a phone, without me explaining it?**
 
-### 6.0 Capture what is already known
+### 6.0 Capture what is already known — **done, first pass**
 
-Nothing else in this milestone is worth starting before the notes from actually
-playing it are written down: what was boring, what was unclear, what was
-frustrating, what felt good. Every target below is a hypothesis I derived from
-the code, and a played opinion beats all of them.
+Five observations came back from playing it, and all five are fixed: the card
+bar covered the cannon, hits had no visible numbers, battles ran long, the HUD
+was too small, and the energy total could not be read. What that leaves is the
+next round of notes — a 90-second battle is a different game from a 180-second
+one, and the balance below is now guesswork against a clock nobody has played.
 
-**Done when** the observations are in a file or an issue, specific enough to act
-on — "sappers die before they reach anything" rather than "attack feels weak".
+The standing rule, which holds for every round after this one: nothing else in
+this milestone is worth starting before the notes from actually playing it are
+written down — what was boring, what was unclear, what was frustrating, what felt
+good. Every target below is a hypothesis derived from the code, and a played
+opinion beats all of them.
+
+**Done when** the observations are specific enough to act on — "sappers die
+before they reach anything" rather than "attack feels weak".
 
 ### 6.1 Make runs reproducible
 
@@ -75,44 +82,47 @@ Four standing hypotheses, in the order I would test them:
    takes 0.55× from blast and 0.3× from melee, and cantilevers 5 cells. If the
    iron shell beats the stone keep on equal budget by a wide margin, the cost or
    the resistances are wrong — not both at once.
-2. **The three-minute timer has never met a good castle.** If the best archetype
-   finishes with most of its blocks standing, defence is a formality: ramp the
-   AI harder rather than lengthening the clock, which only makes a won battle
-   take longer.
-3. **Gold banking may trivialise walls.** Income is 7/s against a 420 cap and a
-   15g shot on a 900 ms cooldown, so sustained fire is gold-limited but a full
-   bank is 28 shots held in reserve. Check whether saving up and bursting beats
-   playing continuously; if it does, lower the cap rather than the income.
-4. **The march is about nine seconds.** Deliberate — it is the cannon's window —
-   but it is the first thing to shorten if the middle of a battle drags.
+2. **The 90-second clock has never met a good castle.** The battle was halved on
+   play feedback and everything timed against it was rescaled by hand — income,
+   energy regen, AI reloads, wave spacing. Those multipliers are arithmetic, not
+   evidence. If the best archetype finishes with most of its blocks standing,
+   ramp the AI harder rather than lengthening the clock again.
+3. **The gold cap is the lever, not the income.** 13/s against a 260 cap and a
+   15g shot on a 900 ms cooldown: sustained fire is gold-limited, and the cap is
+   deliberately a little over one magazine so banking cannot replace playing.
+   Check whether saving up and bursting still beats spending as you go.
+4. **The march is about seven seconds** — a twelfth of the battle now, against a
+   twentieth before. It is the cannon's window, but it is the first thing to
+   shorten if the middle of a battle drags.
 
 Numbers live in `src/core/materials.ts` and `src/core/units.ts` and are meant to
 be edited. **Done when** each hypothesis is either confirmed and fixed, or
 recorded as measured and fine.
 
-### 6.4 Phone legibility and touch targets
+### 6.4 Phone legibility and touch targets — **done**
 
 Framing is solved; size is not. On a 390×844 phone one world pixel is 0.65 CSS
-pixels, which makes the current HUD:
+pixels, which made the HUD:
 
-| Element | World | On screen | Verdict |
-| --- | --- | --- | --- |
-| Body text | 13 px | 8.5 px | Unreadable |
-| Status text | 15 px | 9.8 px | Barely |
-| Gold / timer | 18 px | 11.7 px | Tight |
-| `hudButton` | 150×34 | 97×22 | Under the 44 pt touch guideline |
-| Card | 136×92 | 88×60 | Fine as is |
+| Element | Was | On screen | Now | On screen |
+| --- | --- | --- | --- | --- |
+| Card blurb | 11 px | 7.2 px | 18 px | 11.7 px |
+| Status text | 15 px | 9.8 px | 21 px | 13.7 px |
+| Gold / timer | 18 px | 11.7 px | 24 px | 15.6 px |
+| `hudButton` | 150×34 | 97×22 | 196×56 | 127×36 |
+| Card | 136×92 | 88×60 | 210×114 | 137×74 |
 
-The HUDs in `SiegeScene`, `DefendScene` and `BuildScene` position everything with
-magic numbers, so this is a refactor before it is a fix:
+Buttons still sit under the 44 pt guideline at 36: the top bar is the scarcest
+space in a 600px-tall world. It is a judgement, not an oversight.
 
-- `src/ui/layout.ts` — a scale factor plus anchor helpers (top-left, top-right,
-  bottom-left), replacing the literals.
-- Floors: no text below 20 world px, nothing tappable below 68 world px tall.
-- Bump the scale further on small screens once the anchors make that cheap.
+`src/ui/layout.ts` now holds the sizes and the reasoning, replacing the magic
+numbers the three HUDs each carried. `tests/viewport.test.mjs` asserts the 18px
+floor in both battle modes, so a future tweak cannot quietly reintroduce
+8-pixel text.
 
-**Done when** the viewport tests assert the floors, so a future HUD tweak cannot
-quietly reintroduce 8-pixel text.
+Left undone: `BuildScene` still positions its palette with literals, and the
+scale does not yet respond to screen size — a tablet gets the same sizes as a
+phone, which is fine but not optimal.
 
 ### 6.5 Sound
 

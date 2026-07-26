@@ -196,6 +196,58 @@ console.log('address bar appears');
   await ctx.close();
 }
 
+// ------------------------------------------------- HUD legibility and layout
+
+console.log('HUD floors');
+{
+  const { ctx, page } = await openContext(browser, 844, 390);
+  // Both battle modes need a castle to load.
+  await page.evaluate(() => {
+    const blocks = [[35, 15, 'throne']];
+    for (let r = 15; r >= 12; r--) for (let c = 30; c <= 34; c++) blocks.push([c, r, 'stone']);
+    localStorage.setItem(
+      'siege-and-stone:castle:v1',
+      JSON.stringify({ v: 1, spent: 400, blocks }),
+    );
+  });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(900);
+
+  for (const key of ['Siege', 'Defend']) {
+    await page.evaluate((k) => {
+      const g = window.__game;
+      g.scene.stop('Menu');
+      g.scene.stop('Siege');
+      g.scene.stop('Defend');
+      g.scene.start(k);
+    }, key);
+    await page.waitForTimeout(800);
+
+    const hud = await page.evaluate((k) => {
+      const scene = window.__game.scene.getScene(k);
+      const sizes = scene.children.list
+        .filter((o) => o.type === 'Text' && o.text)
+        .map((o) => ({ text: o.text.slice(0, 24), size: parseFloat(o.style.fontSize) }));
+      const bar = scene.cardBar;
+      const bottom = bar.slotY(bar.engine.handSize - 1) + 114;
+      return { sizes, bottom };
+    }, key);
+
+    // Guard against a vacuous pass: if nothing was collected, the selector broke.
+    check(`${key}: HUD text was actually found`, hud.sizes.length >= 6, `${hud.sizes.length} texts`);
+    const tooSmall = hud.sizes.filter((s) => s.size < 18);
+    check(
+      `${key}: no HUD text below 18px (~12 CSS px on a phone)`,
+      tooSmall.length === 0,
+      JSON.stringify(tooSmall),
+    );
+    // The gun pivots at 542 and its barrel is 42 long, so at full elevation the
+    // muzzle reaches 500. Anything in the hand below that hides the aim.
+    check(`${key}: card column stops above the gun`, hud.bottom <= 492, `bottom=${hud.bottom}`);
+  }
+  await ctx.close();
+}
+
 // -------------------------------------------------------------------- tablet
 
 console.log('tablet portrait 820x1180');
