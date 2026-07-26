@@ -10,8 +10,8 @@ Blocks have hitpoints, and anything that loses its support falls. Knock out a
 pillar and the tower above it comes down; undermine a wall and it lands on your
 own sappers.
 
-See [DESIGN.md](DESIGN.md) for the design decisions, how the structural model
-works, and the roadmap.
+See [DESIGN.md](DESIGN.md) for the design decisions and how the structural model
+works, and [ROADMAP.md](ROADMAP.md) for what is being built next.
 
 ## Running it
 

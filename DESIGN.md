@@ -176,25 +176,10 @@ those tests loudly.
 
 ## Roadmap
 
-**Milestone 3 — campaign.** Handcrafted levels alternating attack and defence,
-with per-level budgets, fixed decks and star ratings. Level data is the same
-`CastleSave` format the builder already emits.
-
-**Milestone 4 — card depth.** The combination mechanic: fusing two cards into a
-stronger third (Oak + Iron → Reinforced Gate). Deckbuilding as meta-progression.
-Worth doing only once the base loop is proven fun — a combination system on top
-of a loop that does not work will not save it.
-
-**Milestone 5 — Android.** Capacitor wrap of `dist/`. The build already emits
-relative paths, the input is pointer-based, and the screen fit above removes the
-need for a landscape lock, so this is mostly packaging plus a pass on touch
-target sizes. The open question is legibility rather than framing: the HUD is
-sized for a 1280px-wide world, which on a 390px phone puts body text under 9
-physical pixels. An in-game camera zoom, or a second HUD scale for small
-screens, is the likely answer — but it wants a real device to judge.
-
-Deliberately deferred: accounts, servers, PvP, castle sharing codes. All of it
-can be layered on the existing save format later without reworking the core.
+Forward plan lives in [ROADMAP.md](ROADMAP.md), so there is one place to change
+when priorities move. In short: feel and balance next, then a campaign, then
+Android. Cards stay a light layer — the fusion and deckbuilding meta that was
+milestone 4 has been retired.
 
 ## Balance notes
 
