@@ -57,13 +57,19 @@ export const BUTTON = { w: 196, h: 56 };
  */
 export const CARD = {
   x: 10,
-  w: 210,
+  w: 240,
   h: 114,
   gap: 10,
+  /** Symbol box on the left of each card; the text starts to its right. */
+  icon: 56,
+  iconPad: 12,
   /** Top of the energy readout; the hand starts below it. */
   meterY: TOP_BAR_H + 10,
   meterH: 40,
 };
+
+/** Left edge of a card's text, clear of the symbol. */
+export const CARD_TEXT_X = CARD.x + CARD.iconPad * 2 + CARD.icon;
 
 /** Where the hand begins, leaving room for the energy readout above it. */
 export const CARD_TOP = CARD.meterY + CARD.meterH + 10;

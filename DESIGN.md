@@ -86,6 +86,30 @@ yourself or hold it against an AI besieger.
 - Win by surviving the timer; lose the moment the throne falls — the inverse of
   the siege, resolved from the same battle outcome
 
+**Reading the battle without reading**
+
+The game should make sense to a six-year-old, which rules out anything whose
+meaning lives only in a word or a number.
+
+- Every card leads with a **drawn symbol** — three linked shot, a powder keg, a
+  banner, a shield, a cauldron — with its cost directly beneath, so the left
+  edge of a card answers "what is it, and can I afford it" without a name being
+  read. They are vector, not art files: nothing to license, nothing to ship, and
+  sharp at any zoom. A core test asserts every dealt card has one, so a new card
+  cannot quietly fall back to a plain disc.
+- The battle runs **dawn to midnight**. The sun rises as the fight is declared,
+  crosses, and sets exactly at the halfway mark; the moon carries the second
+  half. The sky is therefore the clock: a player who cannot yet read `1:29` can
+  see that the sun is going down. `SkyView` takes the same 0..1 progress value
+  that drives the attacker AI's difficulty ramp, so the assault peaks in the
+  dark rather than merely near it.
+
+Two placement details are load-bearing rather than decorative. The celestial arc
+does not run edge to edge — the card column owns the left 250px, and a sun
+rising at x=0 would spend the first nine seconds behind the HUD, which is the
+one moment the whole idea rests on. Its peak stops short of the top for the same
+reason: higher, and the moon sat on the hint text.
+
 **Reading the battle**
 - Every hit floats the damage it actually did, after the target material's
   resistance, and the count of blocks it brought down. One number per impact,
