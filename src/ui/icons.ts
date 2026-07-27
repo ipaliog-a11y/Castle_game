@@ -306,6 +306,17 @@ const GLYPHS: Record<string, (c: Ctx) => void> = {
 };
 
 /**
+ * Base blocks wear the symbol of the card they power. That shared glyph is the
+ * whole explanation: the cauldron on the field blows up, the cauldron in your
+ * hand goes with it, and nobody has to read why.
+ */
+export const BASE_GLYPH: Record<string, string> = {
+  masonsYard: 'repair',
+  oilVat: 'boilingOil',
+  bastion: 'reinforce',
+};
+
+/**
  * Whether an id has a drawn symbol. Tested against the deck, the buildable
  * materials and the troop roster, so anything new fails a test rather than
  * quietly falling back to a disc.

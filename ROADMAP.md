@@ -84,7 +84,7 @@ guard originally read "is the throne present" *after* the battle, which made it
 fire on every row the attacker won — that is, all of them. It snapshots before
 the loop now.
 
-### 6.3 Settle the numbers — **next, and the guesses were wrong**
+### 6.3 Settle the numbers — **first pass done, one problem left**
 
 First report, 6 seeds per matchup:
 
@@ -123,11 +123,43 @@ What the table falsified:
    ground to reach it. Height and mass above that line are wasted, which is why
    the thick keep can lose with most of itself intact.
 
-That third finding is a design problem, not a tuning one, and it should be
-settled before any number is touched: a castle where only one row matters is not
-a castle. Options, cheapest first — make the throne's row cost the attacker
-something (rubble that must be cleared), let the builder place the throne, or
-make ground-level fire harder than plunging fire.
+That third finding is a design problem, not a tuning one. Support bases are the
+answer to the half of it about dead space behind the throne — see DESIGN.md.
+
+#### After bases and a tuning pass
+
+```
+  archetype       spend  blocks | AI attacks: win  survived  standing  bases | bot attacks: win   time
+  bare throne        0       0 |            100%  29.8s        0%      - |             100%   10.4s
+  thin curtain     900      60 |             50%  86.8s        2%      - |               0%      -s
+  thick keep       825      55 |            100%  39.1s       73%      - |             100%   26.8s
+  iron shell       855      19 |            100%  40.6s       85%      - |             100%   58.6s
+  timber sprawl    900     180 |            100%  39.8s       51%      - |             100%   28.5s
+  arch fort        900      60 |            100%  89.3s        0%      - |               0%      -s
+  bases clustered  660      47 |              0%     -s        4%    0/3 |               0%      -s
+  bases spread     660      47 |             25%  88.5s        4%    1/3 |               0%      -s
+```
+
+Changed: stone 110→150 hp, timber 40→55, iron 45→32g and 260→300 hp, throne
+200→380 hp, income 13→10/s, shot 15→18g, player shot 62→42 damage, AI 62→42 and
+110→75, AI reload tightened.
+
+The archetypes now differentiate instead of all reading 100%, and spreading the
+bases keeps one more of them than clustering. But **the split is between spread
+and compact, not between good and bad**, and that is the problem left:
+
+- Spread castles (thin curtain, arch fort, both base rows) hold against the dumb
+  bot every time.
+- Compact ones (thick keep, iron shell, timber sprawl) fall every time.
+
+Horizontal depth in front of the throne is still the only thing that really
+counts. Bases give the rear a purpose, but they do not change what wins.
+
+Two honest caveats on the table above. The defence column plays **no cards**, so
+it is a floor. And my archetypes conflate *compact* with *shallow* — the "thick
+keep" spans columns 31–38, which is only four columns in front of the throne, so
+it is testing depth as much as it is testing thickness. A fair comparison would
+hold depth constant, and that is the next thing to fix in the harness.
 
 ### 6.4 Phone legibility and touch targets — **done**
 
