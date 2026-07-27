@@ -1,3 +1,5 @@
+import { Rng, randomSeed } from './rng';
+
 export type Side = 'offense' | 'defense';
 
 /**
@@ -95,6 +97,8 @@ export const OFFENSE_DECK = ['chainShot', 'blackPowder', 'sapperCharge', 'rally'
 export const DEFENSE_DECK = ['repair', 'boilingOil', 'reinforce'];
 
 export class CardEngine {
+  private rng: Rng;
+
   energy: number;
   readonly energyMax: number;
   readonly regenPerSec: number;
@@ -106,8 +110,16 @@ export class CardEngine {
 
   constructor(
     deckIds: string[],
-    opts: { handSize?: number; energyMax?: number; regenPerSec?: number; start?: number } = {},
+    opts: {
+      handSize?: number;
+      energyMax?: number;
+      regenPerSec?: number;
+      start?: number;
+      /** The battle's dice, so a seeded battle deals the same hand. */
+      rng?: Rng;
+    } = {},
   ) {
+    this.rng = opts.rng ?? new Rng(randomSeed());
     this.handSize = opts.handSize ?? 3;
     this.energyMax = opts.energyMax ?? 10;
     // Halving the clock halves how many cards a battle can afford, so regen
@@ -153,9 +165,6 @@ export class CardEngine {
   }
 
   private shuffle<T>(arr: T[]): void {
-    for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
-    }
+    this.rng.shuffle(arr);
   }
 }

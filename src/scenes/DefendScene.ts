@@ -46,6 +46,8 @@ export class DefendScene extends BattleScene {
   private shotsFired = 0;
   private reinforceUntil = 0;
   private flashUntil = 0;
+  /** Troops waiting on their staggered arrival time. */
+  private pending: Array<{ id: UnitId; at: number }> = [];
 
   private timerText!: Phaser.GameObjects.Text;
   private statusText!: Phaser.GameObjects.Text;
@@ -64,11 +66,12 @@ export class DefendScene extends BattleScene {
     this.shotsFired = 0;
     this.reinforceUntil = 0;
     this.flashUntil = 0;
+    this.pending = [];
 
     // Above the card column, so a targeting circle dragged over the hand is
     // still visible where it matters.
     this.overlay = this.add.graphics().setDepth(55);
-    this.cards = new CardEngine(DEFENSE_DECK, { start: 6, regenPerSec: 1.15 });
+    this.cards = new CardEngine(DEFENSE_DECK, { start: 6, regenPerSec: 1.15, rng: this.rng });
     this.buildHud();
     this.bindInput();
     this.view.draw();
@@ -87,6 +90,13 @@ export class DefendScene extends BattleScene {
   private runAi(deltaMs: number): void {
     const p = this.pressure();
 
+    for (let i = this.pending.length - 1; i >= 0; i--) {
+      if (this.elapsed >= this.pending[i].at) {
+        this.spawnUnit(this.pending[i].id);
+        this.pending.splice(i, 1);
+      }
+    }
+
     // Resolve a telegraphed shot once its marker has had its moment.
     if (this.telegraph && this.elapsed >= this.telegraph.at) {
       this.fireAt(this.telegraph.x, this.telegraph.y);
@@ -100,18 +110,18 @@ export class DefendScene extends BattleScene {
         // Aim wanders less as the siege wears on.
         const spread = 74 - 56 * p;
         this.telegraph = {
-          x: target.x + Phaser.Math.FloatBetween(-spread, spread),
-          y: target.y + Phaser.Math.FloatBetween(-spread * 0.5, spread * 0.5),
+          x: target.x + this.rng.float(-spread, spread),
+          y: target.y + this.rng.float(-spread * 0.5, spread * 0.5),
           at: this.elapsed + TELEGRAPH_MS,
         };
       }
-      this.reloadTimer = Phaser.Math.Between(1900 - 1000 * p, 2600 - 1300 * p);
+      this.reloadTimer = this.rng.between(1900 - 1000 * p, 2600 - 1300 * p);
     }
 
     this.waveTimer -= deltaMs;
     if (this.waveTimer <= 0) {
       this.sendWave(p);
-      this.waveTimer = Phaser.Math.Between(5200 - 2000 * p, 7600 - 3000 * p);
+      this.waveTimer = this.rng.between(5200 - 2000 * p, 7600 - 3000 * p);
     }
   }
 
@@ -128,7 +138,7 @@ export class DefendScene extends BattleScene {
     if (blocks.length === 0) return null;
 
     const throne = this.castle.find('throne');
-    if (throne && Math.random() < 0.2) {
+    if (throne && this.rng.chance(0.2)) {
       const at = { x: colToX(throne.col) + CELL / 2, y: rowToY(throne.row) + CELL / 2 };
       if (this.solveFor(at.x, at.y)) return at;
     }
@@ -139,7 +149,7 @@ export class DefendScene extends BattleScene {
       .map((b) => ({
         x: colToX(b.col) + CELL / 2,
         y: rowToY(b.row) + CELL / 2,
-        score: b.row * 2 + Math.random() * GRID_ROWS,
+        score: b.row * 2 + this.rng.next() * GRID_ROWS,
       }))
       .sort((a, b) => b.score - a.score);
 
@@ -182,18 +192,18 @@ export class DefendScene extends BattleScene {
     if (!shot) return;
     this.lastAngle = Math.atan2(shot.vy, shot.vx);
     this.shotsFired++;
-    const heavy = Math.random() < 0.25 + this.pressure() * 0.25;
+    const heavy = this.rng.chance(0.25 + this.pressure() * 0.25);
     this.launch(shot.vx, shot.vy, heavy ? 110 : 62, heavy ? 1.9 : 1.25);
   }
 
   private sendWave(p: number): void {
     const count = 1 + Math.round(p * 2);
     for (let i = 0; i < count; i++) {
-      const id: UnitId = Math.random() < 0.35 + p * 0.2 ? 'sapper' : 'knight';
+      const id: UnitId = this.rng.chance(0.35 + p * 0.2) ? 'sapper' : 'knight';
       // Stagger arrivals so a wave trickles in rather than appearing at once.
-      this.time.delayedCall(i * 650, () => {
-        if (!this.finished) this.spawnUnit(id);
-      });
+      // Queued against battle time, not Phaser's clock: a wall-clock timer here
+      // would make the same seed spawn troops at different moments.
+      this.pending.push({ id, at: this.elapsed + i * 650 });
     }
     this.wavesSent++;
     this.flash(`Wave ${this.wavesSent} incoming — ${count} attacker${count > 1 ? 's' : ''}.`);

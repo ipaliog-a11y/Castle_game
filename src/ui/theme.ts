@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { drawGlyph } from './icons';
 import { FONT_SIZE } from './layout';
 import { SkyView } from './sky';
 
@@ -83,8 +84,57 @@ export function hudButton(
     );
 }
 
-/** Late-afternoon light: warm, but with the sun still well clear of the hills. */
-const MENU_PROGRESS = 0.36;
+/**
+ * A HUD button that leads with a drawn symbol, for the things you buy or build.
+ * Same behaviour as `hudButton`, including swallowing the tap.
+ */
+export function iconButton(
+  scene: Phaser.Scene,
+  cx: number,
+  cy: number,
+  w: number,
+  h: number,
+  glyph: string,
+  accent: number,
+  text: string,
+  onClick: () => void,
+): void {
+  const left = cx - w / 2;
+  const size = h - 14;
+  const g = scene.add.graphics().setDepth(41);
+  panel(g, left, cy - h / 2, w, h, 0x1d2536, 0x5c6a8a, 0.95, 6);
+  drawGlyph(g, glyph, left + 10 + size / 2, cy, size, accent);
+
+  scene.add
+    .text(left + size + 22, cy, text, {
+      fontFamily: FONT,
+      fontSize: `${FONT_SIZE.small}px`,
+      color: COLORS.text,
+    })
+    .setOrigin(0, 0.5)
+    .setDepth(42);
+  scene.add
+    .rectangle(cx, cy, w, h, 0, 0)
+    .setDepth(43)
+    .setInteractive({ useHandCursor: true })
+    .on(
+      'pointerdown',
+      (_p: Phaser.Input.Pointer, _x: number, _y: number, ev: Phaser.Types.Input.EventData) => {
+        ev.stopPropagation();
+        onClick();
+      },
+    );
+}
+
+/**
+ * Dusk, matching the dark sky these screens were designed against.
+ *
+ * Not an aesthetic preference: the menu, builder and result screen all put dim
+ * grey body text straight onto the backdrop, and against a daylight sky it is
+ * close to unreadable. Unifying the sky renderer brightened these screens by
+ * accident; this puts them back.
+ */
+const MENU_PROGRESS = 0.56;
 
 /**
  * Backdrop for the scenes that are not a battle. Same renderer as the battle

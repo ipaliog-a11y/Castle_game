@@ -18,7 +18,12 @@ import {
 import { BUILDABLE, MATERIALS, type MaterialId } from '../core/materials';
 import { store } from '../core/store';
 import { CastleView } from '../ui/CastleView';
+import { drawGlyph } from '../ui/icons';
+import { BUTTON, FONT_SIZE, TOP_BAR_H } from '../ui/layout';
 import { COLORS, FONT, drawBackdrop, panel } from '../ui/theme';
+
+/** Palette entry: symbol on the left, name and price to its right. */
+const PALETTE = { w: 168, h: 52, gap: 8, glyph: 38 };
 
 type Tool = MaterialId | 'erase';
 
@@ -55,7 +60,7 @@ export class BuildScene extends Phaser.Scene {
 
   private bindInput(): void {
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      if (p.y < 56) return; // HUD strip
+      if (p.y < TOP_BAR_H) return; // HUD strip
       this.painting = true;
       this.apply(p.worldX, p.worldY);
     });
@@ -65,7 +70,7 @@ export class BuildScene extends Phaser.Scene {
       const col = xToCol(p.worldX);
       const row = yToRow(p.worldY);
       this.hover = this.inBuildZone(col, row) ? { col, row } : null;
-      if (this.painting && p.y >= 56) this.apply(p.worldX, p.worldY);
+      if (this.painting && p.y >= TOP_BAR_H) this.apply(p.worldX, p.worldY);
       else this.redraw();
     });
   }
@@ -129,32 +134,33 @@ export class BuildScene extends Phaser.Scene {
 
   private buildHud(): void {
     const g = this.add.graphics().setDepth(40);
-    panel(g, 0, 0, WORLD_WIDTH, 56, COLORS.panel, COLORS.panelEdge, 0.96, 0);
+    panel(g, 0, 0, WORLD_WIDTH, TOP_BAR_H, COLORS.panel, COLORS.panelEdge, 0.96, 0);
+    const midY = TOP_BAR_H / 2;
 
-    this.add
-      .text(16, 28, 'BUILD PHASE', { fontFamily: FONT, fontSize: '18px', color: COLORS.text })
-      .setOrigin(0, 0.5);
-
-    let x = 170;
+    let x = 16;
     for (const mat of BUILDABLE) {
-      x = this.paletteButton(x, mat, `${MATERIALS[mat].name}  ${MATERIALS[mat].cost}g`);
+      x = this.paletteButton(x, mat, `${MATERIALS[mat].name} ${MATERIALS[mat].cost}g`);
     }
-    x = this.paletteButton(x + 12, 'erase', 'Erase');
+    x = this.paletteButton(x + 10, 'erase', 'Erase');
 
     this.budgetText = this.add
-      .text(WORLD_WIDTH - 232, 28, '', { fontFamily: FONT, fontSize: '18px', color: COLORS.gold })
+      .text(WORLD_WIDTH - 236, midY, '', {
+        fontFamily: FONT,
+        fontSize: `${FONT_SIZE.headline}px`,
+        color: COLORS.gold,
+      })
       .setOrigin(1, 0.5)
       .setDepth(41);
 
-    this.textButton(WORLD_WIDTH - 150, 28, 130, 34, 'BEGIN SIEGE', () => {
+    this.textButton(WORLD_WIDTH - 118, midY, 204, BUTTON.h, 'BEGIN SIEGE', () => {
       store.saveCastle(this.castle, this.spent);
       this.scene.start('Siege');
     });
-    this.textButton(WORLD_WIDTH - 150, 78, 130, 30, 'Menu', () => {
+    this.textButton(WORLD_WIDTH - 92, TOP_BAR_H + 40, 152, 44, 'Menu', () => {
       store.saveCastle(this.castle, this.spent);
       this.scene.start('Menu');
     });
-    this.textButton(WORLD_WIDTH - 296, 78, 130, 30, 'Clear all', () => {
+    this.textButton(WORLD_WIDTH - 256, TOP_BAR_H + 40, 152, 44, 'Clear all', () => {
       this.castle = store.newCastle();
       this.spent = 0;
       this.view.destroy();
@@ -163,19 +169,31 @@ export class BuildScene extends Phaser.Scene {
     });
 
     this.hintText = this.add
-      .text(16, 78, '', { fontFamily: FONT, fontSize: '14px', color: COLORS.danger })
+      .text(16, TOP_BAR_H + 22, '', {
+        fontFamily: FONT,
+        fontSize: `${FONT_SIZE.small}px`,
+        color: COLORS.danger,
+      })
       .setOrigin(0, 0.5)
       .setDepth(41);
   }
 
+  /**
+   * One palette entry. The symbol carries the meaning — planks, a staggered
+   * brick bond, a riveted plate — so which material is selected reads without
+   * the name, and the dimmed symbol on an unselected entry says so too.
+   */
   private paletteButton(x: number, tool: Tool, text: string): number {
-    const w = 132;
-    const h = 34;
-    const y = 11;
+    const { w, h, gap, glyph } = PALETTE;
+    const y = (TOP_BAR_H - h) / 2;
     const g = this.add.graphics().setDepth(41);
     const t = this.add
-      .text(x + w / 2, 28, text, { fontFamily: FONT, fontSize: '14px', color: COLORS.text })
-      .setOrigin(0.5)
+      .text(x + glyph + 22, y + h / 2, text, {
+        fontFamily: FONT,
+        fontSize: `${FONT_SIZE.small}px`,
+        color: COLORS.text,
+      })
+      .setOrigin(0, 0.5)
       .setDepth(42);
 
     const paint = () => {
@@ -183,8 +201,7 @@ export class BuildScene extends Phaser.Scene {
       g.clear();
       const accent = tool === 'erase' ? 0xb05a4a : MATERIALS[tool].fill;
       panel(g, x, y, w, h, on ? 0x27314a : 0x161c28, on ? accent : 0x2b3243, 0.95, 6);
-      g.fillStyle(accent, on ? 1 : 0.5);
-      g.fillRoundedRect(x + 6, y + 8, 10, h - 16, 2);
+      drawGlyph(g, tool, x + 12 + glyph / 2, y + h / 2, glyph, accent, on ? 1 : 0.45);
       t.setColor(on ? COLORS.text : COLORS.dim);
     };
     paint();
@@ -199,7 +216,7 @@ export class BuildScene extends Phaser.Scene {
         for (const fn of this.paletteRefresh) fn();
       });
 
-    return x + w + 8;
+    return x + w + gap;
   }
 
   private textButton(
@@ -213,7 +230,11 @@ export class BuildScene extends Phaser.Scene {
     const g = this.add.graphics().setDepth(41);
     panel(g, cx - w / 2, cy - h / 2, w, h, 0x1d2536, 0x5c6a8a, 0.95, 6);
     this.add
-      .text(cx, cy, text, { fontFamily: FONT, fontSize: '14px', color: COLORS.text })
+      .text(cx, cy, text, {
+        fontFamily: FONT,
+        fontSize: `${FONT_SIZE.small}px`,
+        color: COLORS.text,
+      })
       .setOrigin(0.5)
       .setDepth(42);
     this.add

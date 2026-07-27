@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "npm run test:core",
     "test:core": "esbuild tests/core.test.mjs --bundle --platform=node --format=esm --outfile=node_modules/.cache/core.test.bundle.mjs --log-level=error && node node_modules/.cache/core.test.bundle.mjs",
-    "test:sim": "node tests/sim.test.mjs && node tests/defend.test.mjs && node tests/viewport.test.mjs"
+    "test:sim": "node tests/sim.test.mjs && node tests/defend.test.mjs && node tests/determinism.test.mjs && node tests/viewport.test.mjs"
   },
   "repository": {
     "type": "git",

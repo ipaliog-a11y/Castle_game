@@ -54,6 +54,17 @@ export class ResultScene extends Phaser.Scene {
           lineSpacing: 8,
         })
         .setOrigin(0.5);
+
+      // The seed, quietly. Out of the way during play, but here to quote when a
+      // battle turns out to be worth arguing about — `?seed=` replays it exactly.
+      this.add
+        .text(WORLD_WIDTH - 22, WORLD_HEIGHT - 30, `seed ${r.seed}`, {
+          fontFamily: FONT,
+          fontSize: '18px',
+          color: COLORS.dim,
+        })
+        .setOrigin(1, 1)
+        .setAlpha(0.6);
     }
 
     this.button(WORLD_WIDTH / 2 - 230, 420, 'REBUILD', () => this.scene.start('Build'), 200);

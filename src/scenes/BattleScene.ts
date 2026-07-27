@@ -16,6 +16,7 @@ import {
   yToRow,
 } from '../core/config';
 import { MATERIALS, type MaterialId } from '../core/materials';
+import { Rng, seedFromUrl } from '../core/rng';
 import { store, type PlayerSide } from '../core/store';
 import { UNITS, type UnitDef, type UnitId } from '../core/units';
 import { CastleView } from '../ui/CastleView';
@@ -25,6 +26,25 @@ import { FONT } from '../ui/theme';
 export const BALL_GRAVITY = 900;
 const DEBRIS_GRAVITY = 1150;
 const UNIT_GRAVITY = 1500;
+
+/**
+ * The simulation advances in fixed slices, never by whatever the last frame
+ * happened to take.
+ *
+ * Two reasons, and the second is the important one. A phone dropping to 30fps
+ * used to get materially different physics from a desktop at 60 — Euler
+ * integration with a doubled `dt` overshoots — so a wall that held on one
+ * device could fall on another. And a battle can only be replayed from a seed
+ * if every step is identical, which a variable `dt` makes impossible no matter
+ * how well the dice are seeded.
+ */
+export const STEP_MS = 1000 / 60;
+/**
+ * Ceiling on catch-up per frame. A backgrounded tab hands back a delta of
+ * minutes; running that as thousands of steps would lock the page up, so the
+ * battle simply loses that time instead.
+ */
+const MAX_CATCHUP_MS = 250;
 
 export interface Ball {
   x: number;
@@ -122,6 +142,11 @@ export abstract class BattleScene extends Phaser.Scene {
   protected blocksAtStart = 0;
   protected finished = false;
 
+  /** The battle's dice. Same seed, same battle — see `src/core/rng.ts`. */
+  protected rng!: Rng;
+  /** Unspent frame time carried into the next update. */
+  private accumulator = 0;
+
   /** Scales all damage dealt to the castle. Reinforce drops this below 1. */
   protected castleDamageMul = 1;
   /** Battle-time stamp past which the rally buff has expired. */
@@ -142,6 +167,8 @@ export abstract class BattleScene extends Phaser.Scene {
   protected bootBattle(): void {
     this.castle = store.loadCastle();
     this.blocksAtStart = this.castle.count();
+    this.rng = new Rng(seedFromUrl());
+    this.accumulator = 0;
 
     this.balls = [];
     this.debris = [];
@@ -177,23 +204,34 @@ export abstract class BattleScene extends Phaser.Scene {
 
   override update(_time: number, deltaMs: number): void {
     if (this.finished) return;
-    const dt = Math.min(deltaMs, 50) / 1000;
 
-    this.elapsed += deltaMs;
-    this.timeLeft -= deltaMs;
+    this.accumulator = Math.min(this.accumulator + deltaMs, MAX_CATCHUP_MS);
+    while (this.accumulator >= STEP_MS && !this.finished) {
+      this.accumulator -= STEP_MS;
+      this.step();
+    }
 
-    this.onTick(dt, deltaMs);
+    // Drawing happens once per frame regardless of how many steps ran.
+    this.sky.draw(this.progress());
+    this.view.draw();
+    this.drawFx();
+    this.onDraw();
+  }
+
+  /** One fixed slice of simulation. */
+  private step(): void {
+    const dt = STEP_MS / 1000;
+
+    this.elapsed += STEP_MS;
+    this.timeLeft -= STEP_MS;
+
+    this.onTick(dt, STEP_MS);
 
     this.updateBalls(dt);
     this.updateDebris(dt);
     this.updateUnits(dt);
     this.updateParticles(dt);
     this.updateFloaters(dt);
-
-    this.sky.draw(this.progress());
-    this.view.draw();
-    this.drawFx();
-    this.onDraw();
 
     const verdict = this.checkEnd();
     if (verdict !== null) this.finishBattle(verdict);
@@ -372,7 +410,7 @@ export abstract class BattleScene extends Phaser.Scene {
     const def = UNITS[id];
     const unit: Unit = {
       def,
-      x: SPAWN_X + Phaser.Math.Between(-10, 10),
+      x: SPAWN_X + this.rng.between(-10, 10),
       feetY: GROUND_Y,
       vy: 0,
       hp: def.hp,
@@ -557,6 +595,11 @@ export abstract class BattleScene extends Phaser.Scene {
 
   // ------------------------------------------------------------ particles
 
+  /**
+   * Cosmetic only, and deliberately *not* on `this.rng`: drawing from the
+   * seeded stream here would mean adding a puff of smoke silently changed the
+   * outcome of every seeded battle.
+   */
   protected burst(x: number, y: number, count: number, color: number, speed: number): void {
     for (let i = 0; i < count; i++) {
       const a = Math.random() * Math.PI * 2;
@@ -672,6 +715,7 @@ export abstract class BattleScene extends Phaser.Scene {
     this.finished = true;
     store.lastResult = {
       attackerWon,
+      seed: this.rng.seed,
       playerSide: this.playerSide,
       msElapsed: this.elapsed,
       blocksLeft: this.castle.count(),

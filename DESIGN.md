@@ -91,12 +91,15 @@ yourself or hold it against an AI besieger.
 The game should make sense to a six-year-old, which rules out anything whose
 meaning lives only in a word or a number.
 
-- Every card leads with a **drawn symbol** — three linked shot, a powder keg, a
-  banner, a shield, a cauldron — with its cost directly beneath, so the left
-  edge of a card answers "what is it, and can I afford it" without a name being
-  read. They are vector, not art files: nothing to license, nothing to ship, and
-  sharp at any zoom. A core test asserts every dealt card has one, so a new card
-  cannot quietly fall back to a plain disc.
+- Everything the player picks from leads with a **drawn symbol**: cards (linked
+  shot, a powder keg, a banner, a shield, a cauldron), build materials (planks,
+  a staggered brick bond, a riveted plate), the erase tool, and the two troop
+  types (a plumed helm, a pickaxe). Cards put the cost directly beneath, so the
+  left edge answers "what is it, and can I afford it" without a name being read.
+  They are vector, not art files: nothing to license, nothing to ship, and sharp
+  at any zoom. A core test asserts every card, material and troop has one — and
+  that the check itself can still fail — so nothing quietly falls back to a
+  plain disc.
 - The battle runs **dawn to midnight**. The sun rises as the fight is declared,
   crosses, and sets exactly at the halfway mark; the moon carries the second
   half. The sky is therefore the clock: a player who cannot yet read `1:29` can
@@ -157,6 +160,43 @@ Two things fell out of testing it that shaped the AI:
   reloads.
 - **The AI undermines, like a good human attacker.** Target scoring is weighted
   toward low blocks, because knocking out a support drops everything above it.
+
+### One step, and one source of dice
+
+A battle is reproducible: the same seed replays the same battle, block for block
+and hitpoint for hitpoint. That is not a nicety — it is the precondition for
+tuning anything, because without it a balance change cannot be told from noise.
+
+Three things had to be true, and only the first is obvious:
+
+- **All gameplay dice come from one seeded generator** (`src/core/rng.ts`).
+  Note that `Phaser.Math.Between` and `FloatBetween` call `Math.random()`
+  internally, so they cannot be seeded — they had to be replaced, not
+  configured.
+- **Nothing gameplay-relevant runs on the wall clock.** The wave stagger used
+  `time.delayedCall`, so the same seed spawned troops at different moments; it
+  is queued against battle time now.
+- **The simulation advances in fixed slices**, `STEP_MS = 1000/60`, accumulated
+  across frames rather than stepping by whatever the last frame took. This is
+  the one that is easy to miss: with a variable `dt`, Euler integration gives
+  different trajectories at 30fps than at 60, so two runs of one seed diverge no
+  matter how careful the dice are. It also means a phone dropping frames now
+  gets the *same physics* as a desktop rather than merely a slower version —
+  before this, a wall that held on one device could fall on another.
+
+Catch-up is capped at 250ms per frame, so a backgrounded tab loses that time
+rather than running thousands of steps at once when it returns.
+
+Cosmetic randomness — particle bursts — deliberately stays on `Math.random`. If
+it drew from the seeded stream, adding a puff of smoke would shift every later
+roll and silently change the outcome of every battle.
+
+The seed is shown on the result screen and settable with `?seed=`, so a battle
+worth arguing about can be handed back and replayed exactly.
+`tests/determinism.test.mjs` runs one seed twice in defence mode — where the
+human contributes nothing — and asserts the two battles are identical, plus that
+a *different* seed produces a different battle, which is what catches a seed
+being silently ignored.
 
 ### One clock, not two
 

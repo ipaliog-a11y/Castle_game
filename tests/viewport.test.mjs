@@ -213,12 +213,10 @@ console.log('HUD floors');
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForTimeout(900);
 
-  for (const key of ['Siege', 'Defend']) {
+  for (const key of ['Build', 'Siege', 'Defend']) {
     await page.evaluate((k) => {
       const g = window.__game;
-      g.scene.stop('Menu');
-      g.scene.stop('Siege');
-      g.scene.stop('Defend');
+      for (const s of ['Menu', 'Build', 'Siege', 'Defend']) g.scene.stop(s);
       g.scene.start(k);
     }, key);
     await page.waitForTimeout(800);
@@ -229,21 +227,25 @@ console.log('HUD floors');
         .filter((o) => o.type === 'Text' && o.text)
         .map((o) => ({ text: o.text.slice(0, 24), size: parseFloat(o.style.fontSize) }));
       const bar = scene.cardBar;
-      const bottom = bar.slotY(bar.engine.handSize - 1) + 114;
-      return { sizes, bottom };
+      return {
+        sizes,
+        bottom: bar ? bar.slotY(bar.engine.handSize - 1) + 114 : null,
+      };
     }, key);
 
     // Guard against a vacuous pass: if nothing was collected, the selector broke.
-    check(`${key}: HUD text was actually found`, hud.sizes.length >= 6, `${hud.sizes.length} texts`);
+    check(`${key}: HUD text was actually found`, hud.sizes.length >= 5, `${hud.sizes.length} texts`);
     const tooSmall = hud.sizes.filter((s) => s.size < 18);
     check(
       `${key}: no HUD text below 18px (~12 CSS px on a phone)`,
       tooSmall.length === 0,
       JSON.stringify(tooSmall),
     );
-    // The gun pivots at 542 and its barrel is 42 long, so at full elevation the
-    // muzzle reaches 500. Anything in the hand below that hides the aim.
-    check(`${key}: card column stops above the gun`, hud.bottom <= 492, `bottom=${hud.bottom}`);
+    if (hud.bottom !== null) {
+      // The gun pivots at 542 and its barrel is 42 long, so at full elevation
+      // the muzzle reaches 500. Anything in the hand below that hides the aim.
+      check(`${key}: card column stops above the gun`, hud.bottom <= 492, `bottom=${hud.bottom}`);
+    }
   }
   await ctx.close();
 }

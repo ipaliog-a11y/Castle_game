@@ -43,23 +43,22 @@ opinion beats all of them.
 **Done when** the observations are specific enough to act on — "sappers die
 before they reach anything" rather than "attack feels weak".
 
-### 6.1 Make runs reproducible
+### 6.1 Make runs reproducible — **done**
 
-`Math.random()` is called directly in the card shuffle and in the AI's aim
-spread, so no two battles are alike and none can be replayed. That blocks
-balance work outright: you cannot tell a tuning change from noise.
+Seeded dice, battle-time timers and a fixed simulation step; see DESIGN.md for
+why all three were needed rather than just the first. The seed shows on the
+result screen and is settable with `?seed=`.
 
-- `src/core/rng.ts` — a small seeded PRNG.
-- Thread it through `CardEngine` and `DefendScene`'s targeting.
-- Seed settable from a URL parameter so a specific battle can be handed to
-  someone else, or to a test.
+The plan as written here was wrong in a way worth recording: it assumed seeding
+`Math.random` was enough. It is not. The simulation integrated on frame deltas,
+so two runs of one seed diverged on frame timing alone — and that same effect
+was quietly making a test fail on an unchanged tree.
 
-**Done when** the same seed produces the same battle twice, verified by a test
-that runs a fixed seed to completion and compares the outcome.
+### 6.2 Build the balance harness — **next**
 
-### 6.2 Build the balance harness
-
-`tests/sim.test.mjs` already drives the real game headless in Chromium. The same
+`tests/sim.test.mjs` already drives the real game headless in Chromium, and
+`tests/determinism.test.mjs` shows how to drive the simulation directly rather
+than waiting on frames: 40 seconds of battle runs in a fraction of that. The same
 machinery, pointed at a batch of runs instead of assertions, is the tool this
 milestone actually needs — `tests/balance.mjs`, a report generator rather than a
 pass/fail test.
@@ -120,20 +119,21 @@ numbers the three HUDs each carried. `tests/viewport.test.mjs` asserts the 18px
 floor in both battle modes, so a future tweak cannot quietly reintroduce
 8-pixel text.
 
-Left undone: `BuildScene` still positions its palette with literals, and the
-scale does not yet respond to screen size — a tablet gets the same sizes as a
-phone, which is fine but not optimal.
+`BuildScene` is on the same layout now too. Left undone: the scale does not
+respond to screen size — a tablet gets the same sizes as a phone, which is fine
+but not optimal.
 
-### 6.5 Legible to a six-year-old — **first pass done**
+### 6.5 Legible to a six-year-old — **done for now**
 
-Card symbols and the dawn-to-midnight sky (see DESIGN.md). Both exist to move
-meaning out of words and numbers.
+Symbols on every card, build material and troop button, plus the
+dawn-to-midnight sky (see DESIGN.md). All of it moves meaning out of words and
+numbers.
 
-Still word-only, and the obvious next candidates:
+Still word-only:
 
-- The **build palette** — timber, stone and iron are named and priced but not
-  drawn, and `maxSpan` (the number that actually matters) is invisible.
-- The **Knight and Sapper buttons**, which are text and a gold cost.
+- **`maxSpan`** — how far a material can cantilever, which is the number that
+  actually decides a castle, and is invisible in the palette. Pips rather than a
+  digit would keep it pictorial.
 - **Win and lose**, which are a sentence on the result screen.
 
 ### 6.6 Sound

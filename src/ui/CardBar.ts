@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import type { CardDef, CardEngine } from '../core/cards';
-import { drawCardIcon } from './icons';
+import { drawGlyph } from './icons';
 import { CARD, CARD_TEXT_X, CARD_TOP, FONT_SIZE, assertCardBarClearsCannon } from './layout';
 import { COLORS, FONT, panel } from './theme';
 
@@ -150,7 +150,7 @@ export class CardBar {
       g.fillStyle(card.accent, playable ? 1 : 0.35);
       g.fillRoundedRect(CARD.x, cy, 5, CARD.h, 2);
 
-      drawCardIcon(
+      drawGlyph(
         g,
         card.id,
         this.iconX(),

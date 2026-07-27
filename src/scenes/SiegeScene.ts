@@ -21,8 +21,8 @@ import {
 } from '../core/units';
 import { CardBar } from '../ui/CardBar';
 import { BUTTON, FONT_SIZE, TOP_BAR_H } from '../ui/layout';
-import { COLORS, FONT, hudButton, panel } from '../ui/theme';
-import { BALL_GRAVITY, BattleScene } from './BattleScene';
+import { COLORS, FONT, hudButton, iconButton, panel } from '../ui/theme';
+import { BALL_GRAVITY, STEP_MS, BattleScene } from './BattleScene';
 
 const MIN_SHOT_SPEED = 300;
 const MAX_SHOT_SPEED = 1100;
@@ -66,7 +66,7 @@ export class SiegeScene extends BattleScene {
     // Above the card column: the aim arc is the whole interface, and the
     // moment it disappears behind a card the shot becomes a guess.
     this.aimG = this.add.graphics().setDepth(55);
-    this.cards = new CardEngine(OFFENSE_DECK);
+    this.cards = new CardEngine(OFFENSE_DECK, { rng: this.rng });
     this.buildHud();
     this.bindInput();
     this.view.draw();
@@ -230,13 +230,15 @@ export class SiegeScene extends BattleScene {
     if (!this.aiming) return;
     const { vx, vy, power } = this.aimVector();
 
-    // Preview by running the same integration the projectile will use.
+    // Preview by running the same integration the projectile will use — at the
+    // same step size, or the dotted arc quietly promises a shot that will not
+    // happen.
     let x = CANNON_X + 22;
     let y = CANNON_Y - 10;
     let sx = vx;
     let sy = vy;
-    const step = 1 / 40;
-    for (let i = 0; i < 90; i++) {
+    const step = STEP_MS / 1000;
+    for (let i = 0; i < 135; i++) {
       sy += BALL_GRAVITY * step;
       x += sx * step;
       y += sy * step;
@@ -293,11 +295,27 @@ export class SiegeScene extends BattleScene {
       .setOrigin(0.5)
       .setDepth(41);
 
-    hudButton(this, 720, midY, BUTTON.w, BUTTON.h, `Knight ${UNITS.knight.gold}g`, () =>
-      this.deploy('knight'),
+    iconButton(
+      this,
+      720,
+      midY,
+      BUTTON.w,
+      BUTTON.h,
+      'knight',
+      UNITS.knight.fill,
+      `${UNITS.knight.name} ${UNITS.knight.gold}g`,
+      () => this.deploy('knight'),
     );
-    hudButton(this, 926, midY, BUTTON.w, BUTTON.h, `Sapper ${UNITS.sapper.gold}g`, () =>
-      this.deploy('sapper'),
+    iconButton(
+      this,
+      926,
+      midY,
+      BUTTON.w,
+      BUTTON.h,
+      'sapper',
+      UNITS.sapper.fill,
+      `${UNITS.sapper.name} ${UNITS.sapper.gold}g`,
+      () => this.deploy('sapper'),
     );
     hudButton(this, 1160, midY, 180, BUTTON.h, 'Give up', () => this.finishBattle(false));
 
