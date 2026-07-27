@@ -1,8 +1,8 @@
 import { Castle } from '../src/core/castle.ts';
-import { GRID_COLS, GRID_ROWS } from '../src/core/config.ts';
+import { BASE_COL_MIN, BUILD_COL_MAX, GRID_COLS, GRID_ROWS, THRONE_COL } from '../src/core/config.ts';
 import { solveLaunch, solveLaunchAdaptive } from '../src/core/ballistics.ts';
 import { CARDS, DEFENSE_DECK, OFFENSE_DECK } from '../src/core/cards.ts';
-import { BUILDABLE, MATERIALS } from '../src/core/materials.ts';
+import { BASE_MATERIALS, BUILDABLE, MATERIALS } from '../src/core/materials.ts';
 import { UNITS } from '../src/core/units.ts';
 import { hasGlyph } from '../src/ui/icons.ts';
 
@@ -283,6 +283,33 @@ function simulate(x0, y0, vx, vy, tx, ty, steps = 4000, dt = 1 / 240) {
     !buildable.includes(MATERIALS.throne.sound),
     MATERIALS.throne.sound,
   );
+}
+
+
+// 21. Support buildings belong strictly behind the throne. The zone has to be
+// real estate that exists — an off-by-one here would either silently allow the
+// whole build area or leave nowhere legal at all, and both fail quietly rather
+// than loudly.
+{
+  check('the base zone starts past the throne, not on it',
+    BASE_COL_MIN === THRONE_COL + 1, `${BASE_COL_MIN} vs throne ${THRONE_COL}`);
+  const width = BUILD_COL_MAX - BASE_COL_MIN + 1;
+  check('the base zone has room for every base at once',
+    width >= BASE_MATERIALS.length, `${width} columns for ${BASE_MATERIALS.length} bases`);
+  check('the base zone is inside the build area', BASE_COL_MIN <= BUILD_COL_MAX);
+
+  // Every column in the zone has to reach the ground row, or the preset's
+  // "scan up from the bottom and it is always supported" reasoning is wrong.
+  const castle = new Castle();
+  const spans = (() => {
+    for (let col = BASE_COL_MIN; col <= BUILD_COL_MAX; col++) castle.place(col, GRID_ROWS - 1, 'masonsYard');
+    return castle.computeSpans();
+  })();
+  let allGrounded = true;
+  for (let col = BASE_COL_MIN; col <= BUILD_COL_MAX; col++) {
+    if (spans[(GRID_ROWS - 1) * GRID_COLS + col] !== 0) allGrounded = false;
+  }
+  check('a base on the ground row stands unaided anywhere in the zone', allGrounded);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

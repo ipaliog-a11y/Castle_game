@@ -213,6 +213,29 @@ structure rule discoverable instead of enforced.
 - **A sparkle and a word** when a placed block reaches 2 or more cells out, so a
   successful overhang gets noticed rather than merely allowed.
 
+### 6.5c Playable at five — **first pass done**
+
+A five-year-old ran out of clock. The obvious fix — a longer battle — turned out
+to be wrong in a way only measuring showed: in defence the clock *is* the win
+condition, and stretching it makes that mode strictly harder, not easier. The
+numbers and the reasoning are in DESIGN.md.
+
+What shipped instead:
+
+- **Knock It Down**, a sandbox with no clock, no gold and no opponent. The
+  rebuild button is the loop.
+- **Support buildings are restricted to behind the throne**, for every player,
+  because leaving them free had a dominant answer that made the rear space
+  pointless — which is the thing bases were added to fix.
+- **A one-tap Supports preset** that places whichever bases are missing, spread
+  across the rear zone.
+
+Still open, and the reason this is a first pass: a **difficulty tier** for the
+two real modes. It cannot be a time slider — it needs different numbers per
+mode, longer clock and cheaper shots when attacking, slower AI and wider scatter
+when defending. Worth doing only after watching someone small actually play the
+sandbox, because the sandbox may turn out to be the whole answer.
+
 ### 6.6 Sound — **done**
 
 Eighteen voices, all synthesized with the Web Audio API rather than loaded:

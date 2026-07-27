@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { audio } from '../core/audio';
 import { Castle, type CastleSave } from '../core/castle';
 import {
+  BASE_COL_MIN,
   BUILD_BUDGET,
   BUILD_COL_MAX,
   BUILD_COL_MIN,
@@ -110,6 +111,10 @@ export class BuildScene extends Phaser.Scene {
 
   private place(col: number, row: number, mat: MaterialId): void {
     if (this.castle.has(col, row)) return;
+    if (isBase(mat) && col < BASE_COL_MIN) {
+      this.hint('Support buildings go behind the throne — the shaded ground.');
+      return;
+    }
     if (isBase(mat) && this.castle.find(mat)) {
       this.hint(`You already have a ${MATERIALS[mat].name}. Erase it to move it.`);
       return;
@@ -191,6 +196,81 @@ export class BuildScene extends Phaser.Scene {
     this.redraw();
   }
 
+  /**
+   * Drops every support building the castle is missing into the rear zone.
+   *
+   * The rule about where bases go is easy to state and still a step too many
+   * for a five-year-old: they have to notice the shaded ground, pick three
+   * separate symbols, and place each one. This is that whole sequence on one
+   * button, and because bases cost nothing there is no budget question hiding
+   * inside it.
+   *
+   * It spreads before it fills. The outer columns go first and the middle one
+   * last, so two bases only end up adjacent when the third has nowhere else to
+   * be — a wide blast landing between two of them is the failure this avoids.
+   */
+  private placeSupports(): void {
+    const wanted = BASE_MATERIALS.filter((mat) => !this.castle.find(mat));
+    if (wanted.length === 0) {
+      this.hint('All three support buildings are already standing.');
+      return;
+    }
+
+    // Outermost first, middle last.
+    const columns = [BASE_COL_MIN, BUILD_COL_MAX];
+    for (let col = BASE_COL_MIN + 1; col < BUILD_COL_MAX; col++) columns.push(col);
+
+    const placed: Array<[number, number]> = [];
+    for (const mat of wanted) {
+      const at = this.freeRearCell(columns, placed);
+      if (!at) break;
+      if (this.castle.place(at[0], at[1], mat)) placed.push(at);
+    }
+
+    if (placed.length === 0) {
+      this.hint('No room behind the throne. Clear a space first.');
+      return;
+    }
+    // One history entry for the lot: one tap put them there, one undo takes
+    // them away again.
+    this.history.push({ placed, removed: [] });
+    audio.play('place');
+    for (const fn of this.paletteRefresh) fn();
+    this.redraw();
+    this.hint(
+      placed.length === wanted.length
+        ? 'Supports placed behind the throne. Wall them in!'
+        : `Only room for ${placed.length}. Clear some space behind the throne.`,
+    );
+  }
+
+  /**
+   * Lowest free cell in the rear zone, preferring a new column over a new row.
+   *
+   * Row-major, and that is the whole point: scanning column-major fills one
+   * column bottom to top and stacks all three bases in a tower, which is the
+   * worst possible answer — a single wide blast takes the lot. Sweeping each
+   * row across every column first means they only share a column once the row
+   * below is completely full.
+   *
+   * Working upward also makes support free rather than something to check: row
+   * 15 rests on the ground, and a higher row is only reached once every column
+   * beneath it is occupied, so whatever is found is sitting on something.
+   */
+  private freeRearCell(
+    columns: number[],
+    taken: Array<[number, number]>,
+  ): [number, number] | null {
+    for (let row = GRID_ROWS - 1; row >= 0; row--) {
+      for (const col of columns) {
+        if (this.castle.has(col, row)) continue;
+        if (taken.some(([c, r]) => c === col && r === row)) continue;
+        return [col, row];
+      }
+    }
+    return null;
+  }
+
   /** A brief flourish where a cantilevered block was just accepted. */
   private sparkle(col: number, row: number): void {
     const cx = colToX(col) + CELL / 2;
@@ -249,6 +329,9 @@ export class BuildScene extends Phaser.Scene {
       store.saveCastle(this.castle, this.spent);
       this.scene.start('Menu');
     });
+    this.textButton(WORLD_WIDTH - 592, TOP_BAR_H + 40, 164, 44, 'Supports', () =>
+      this.placeSupports(),
+    );
     this.textButton(WORLD_WIDTH - 420, TOP_BAR_H + 40, 152, 44, 'Undo', () => this.undo());
     this.textButton(WORLD_WIDTH - 256, TOP_BAR_H + 40, 152, 44, 'Clear all', () => {
       this.castle = store.newCastle();
@@ -263,7 +346,7 @@ export class BuildScene extends Phaser.Scene {
       .text(
         16,
         TOP_BAR_H + 48,
-        'Yard, vat and bastion each grant a defence card — lose one and the card goes too.',
+        'Supports go behind the throne. Each grants a defence card.',
         { fontFamily: FONT, fontSize: `${FONT_SIZE.small}px`, color: COLORS.dim },
       )
       .setOrigin(0, 0.5)
@@ -383,6 +466,17 @@ export class BuildScene extends Phaser.Scene {
     g.moveTo(x0, GROUND_Y);
     g.lineTo(x1, GROUND_Y);
     g.strokePath();
+
+    // Where the supports are allowed to stand. Shown only while a base is in
+    // hand, so it is an answer to "where does this go" rather than permanent
+    // decoration on a screen that already has plenty.
+    if (this.tool !== 'erase' && isBase(this.tool)) {
+      const rx = colToX(BASE_COL_MIN);
+      g.fillStyle(0xe8c15a, 0.12);
+      g.fillRect(rx, rowToY(0), x1 - rx, GRID_ROWS * CELL);
+      g.lineStyle(2, 0xe8c15a, 0.5);
+      g.strokeRect(rx, rowToY(0), x1 - rx, GRID_ROWS * CELL);
+    }
 
     g.lineStyle(1, 0xffffff, 0.05);
     for (let c = BUILD_COL_MIN; c <= BUILD_COL_MAX + 1; c++) {

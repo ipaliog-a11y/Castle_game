@@ -133,6 +133,82 @@ two-note fall for losing. Losing is deliberately gentle. A harsh buzzer is the
 sound a six-year-old stops playing to, and the thing this game wants next is
 another go.
 
+## Knock it down — the sandbox
+
+No clock, no gold, no opponent, no win condition. Your castle, a cannon, and
+unlimited shots.
+
+It exists because the collapse model is the actual toy and every other mode
+wraps it in scaffolding — an economy, a timer, a thing to lose — that a young
+player has to get through before reaching the good part.
+
+The decision came out of measuring rather than guessing, and the measurement
+changed the answer. The obvious fix for "90 seconds is not enough for a
+five-year-old" is a longer clock, and on the same castle across four seeds that
+makes things **worse**:
+
+| clock | throne fell | median time |
+| --- | --- | --- |
+| 90s (normal) | 3/4 | 81s |
+| 180s | 4/4 | 108s |
+| 300s | 4/4 | 126s |
+| no clock, AI pinned at its opening difficulty | 4/4 | 168s |
+
+Two things fall out of that. In **defence** the clock *is* the win condition —
+"survive to the bell" is the only way to win — so removing it does not make a
+gentler mode, it deletes the win. And lengthening it does not help either,
+because `pressure()` is normalised to progress through the battle: a 180-second
+siege is the same difficulty curve stretched over twice as many AI shots. Only
+in **offence** is the clock a genuine barrier, and there it is decisive — the
+scripted bot wins 0/4 at 90 seconds and 4/4 with no clock, taking 194s.
+
+So there was no single number to loosen. The sandbox takes the scaffolding away
+instead.
+
+Three things it needs that a battle does not:
+
+- **A rebuild button**, which is not a convenience but the loop. Without it you
+  knock the castle down once and the toy is over. `resetCastle()` reloads the
+  saved castle and clears the field while reusing the sky, effects layers and
+  floater pool — going back through `bootBattle` would allocate a scene's worth
+  of Phaser objects every time a child got bored.
+- **Harder shots.** The siege's 42 damage is balanced against gold and a clock;
+  four hits per stone block is a *cost*, and paying it is the game. With nothing
+  to balance against, that same number is four taps before anything visible
+  happens. 92 breaks stone in two and timber in one.
+- **A looping sky.** Everywhere else the dawn-to-midnight cycle *is* the clock,
+  so with no clock it would stick at midnight forever.
+
+The counter reads **blocks smashed**, cumulative, and that distinction matters:
+rubble which survives a fall is re-placed as a real block, so counting what is
+*missing* reads near zero while a wall is being pounded into a heap. Writing the
+test for it turned up a genuine bug — debris landing on a weakened block can
+destroy it, and that was the one kill in the game nothing counted.
+
+## Where the support buildings go
+
+Strictly behind the throne, for everyone.
+
+Bases were added to give the ground behind the throne a purpose. Left
+unrestricted they did the opposite: the safest cell for a base is the one
+immediately in *front* of the throne, where the player's entire wall shields it,
+so the dominant play was to tuck all three there and leave the rear exactly as
+dead as before. A choice with one right answer is not a choice.
+
+The rule is enforced when a block is placed, not when a castle is loaded. A save
+made before it existed keeps its bases wherever they are — deleting part of
+somebody's castle to enforce a balance rule is a worse trade than letting an old
+castle keep a small advantage.
+
+**Supports**, the one-tap preset, is the younger-player half of the same
+feature. Noticing the shaded ground, picking three separate symbols and placing
+each one is a step too many at five; this is that sequence on one button, and
+because bases cost nothing there is no budget question hiding inside it. It
+spreads before it fills — outer columns first, middle last — so two bases only
+end up adjacent when the third has nowhere else to be. That is row-major
+scanning across the zone rather than column-major, and getting it the wrong way
+round stacked all three in a tower where one wide blast took the lot.
+
 ## Current state — milestones 1 and 2
 
 Playable end to end in both directions: build a castle, then either besiege it
