@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { Castle } from '../core/castle';
+import { Castle, type CastleSave } from '../core/castle';
 import {
   BUILD_BUDGET,
   BUILD_COL_MAX,
@@ -41,6 +41,14 @@ export class BuildScene extends Phaser.Scene {
   private spent = 0;
   private painting = false;
   private hover: { col: number; row: number } | null = null;
+  /**
+   * One step of build history per action, newest last.
+   *
+   * An action records the cells it removed, not a whole castle snapshot: erase
+   * takes orphaned blocks down with it, so undoing one tap can mean putting
+   * several blocks back, each with the material it had.
+   */
+  private history: Array<{ placed: Array<[number, number]>; removed: CastleSave['blocks'] }> = [];
   private budgetText!: Phaser.GameObjects.Text;
   private hintText!: Phaser.GameObjects.Text;
   private paletteRefresh: Array<() => void> = [];
@@ -52,6 +60,7 @@ export class BuildScene extends Phaser.Scene {
   create(): void {
     this.castle = store.loadCastle();
     this.spent = store.castleSave?.spent ?? 0;
+    this.history = [];
 
     drawBackdrop(this, WORLD_WIDTH, WORLD_HEIGHT, GROUND_Y);
     this.overlay = this.add.graphics().setDepth(3);
@@ -119,7 +128,13 @@ export class BuildScene extends Phaser.Scene {
       return;
     }
     this.spent += cost;
+    this.history.push({ placed: [[col, row]], removed: [] });
     this.hint('');
+
+    // A block that had to reach sideways to stand is the interesting case — it
+    // is the rule working, and worth noticing rather than merely permitting.
+    const reach = this.castle.computeSpans()[row * GRID_COLS + col];
+    if (reach >= 2) this.sparkle(col, row);
   }
 
   private erase(col: number, row: number): void {
@@ -129,16 +144,65 @@ export class BuildScene extends Phaser.Scene {
       this.hint('The throne stays. Build around it.');
       return;
     }
+    const removed: CastleSave['blocks'] = [[block.col, block.row, block.mat]];
     this.castle.remove(col, row);
     this.spent -= MATERIALS[block.mat].cost;
 
     // Anything the removal orphaned comes down too, and is refunded.
     for (const orphan of this.castle.findUnsupported()) {
       this.castle.remove(orphan.col, orphan.row);
+      removed.push([orphan.col, orphan.row, orphan.mat]);
       if (orphan.mat !== 'throne') this.spent -= MATERIALS[orphan.mat].cost;
     }
     this.spent = Math.max(0, this.spent);
+    this.history.push({ placed: [], removed });
     this.hint('');
+  }
+
+  /**
+   * Reverses the last action, whatever it was.
+   *
+   * Erase already refunds in full, so this is not about gold — it is about a
+   * mis-tap on a touchscreen, where the block you wanted and the block you got
+   * are one cell apart and putting it back by hand means erasing and replacing.
+   */
+  private undo(): void {
+    const step = this.history.pop();
+    if (!step) {
+      this.hint('Nothing to undo.');
+      return;
+    }
+    for (const [col, row] of step.placed) {
+      const block = this.castle.remove(col, row);
+      if (block) this.spent -= MATERIALS[block.mat].cost;
+    }
+    // Bottom-up, so a block never lands before whatever holds it up is back.
+    for (const [col, row, mat] of [...step.removed].sort((a, b) => b[1] - a[1])) {
+      if (this.castle.place(col, row, mat)) this.spent += MATERIALS[mat].cost;
+    }
+    this.spent = Math.max(0, this.spent);
+    for (const fn of this.paletteRefresh) fn();
+    this.redraw();
+  }
+
+  /** A brief flourish where a cantilevered block was just accepted. */
+  private sparkle(col: number, row: number): void {
+    const cx = colToX(col) + CELL / 2;
+    const cy = rowToY(row) + CELL / 2;
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2;
+      const dot = this.add.circle(cx, cy, 3, 0xffe9a8).setDepth(8);
+      this.tweens.add({
+        targets: dot,
+        x: cx + Math.cos(a) * 26,
+        y: cy + Math.sin(a) * 26,
+        alpha: 0,
+        duration: 420,
+        ease: 'Quad.easeOut',
+        onComplete: () => dot.destroy(),
+      });
+    }
+    this.hint('Nice overhang!');
   }
 
   // ------------------------------------------------------------------ hud
@@ -178,9 +242,11 @@ export class BuildScene extends Phaser.Scene {
       store.saveCastle(this.castle, this.spent);
       this.scene.start('Menu');
     });
+    this.textButton(WORLD_WIDTH - 420, TOP_BAR_H + 40, 152, 44, 'Undo', () => this.undo());
     this.textButton(WORLD_WIDTH - 256, TOP_BAR_H + 40, 152, 44, 'Clear all', () => {
       this.castle = store.newCastle();
       this.spent = 0;
+      this.history = [];
       this.view.destroy();
       this.view = new CastleView(this, this.castle, 5);
       this.redraw();
@@ -190,7 +256,7 @@ export class BuildScene extends Phaser.Scene {
       .text(
         16,
         TOP_BAR_H + 48,
-        'The yard, vat and bastion each give you a defence card — lose one in battle and the card goes with it.',
+        'Yard, vat and bastion each grant a defence card — lose one and the card goes too.',
         { fontFamily: FONT, fontSize: `${FONT_SIZE.small}px`, color: COLORS.dim },
       )
       .setOrigin(0, 0.5)

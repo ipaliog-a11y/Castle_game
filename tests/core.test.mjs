@@ -228,5 +228,33 @@ function simulate(x0, y0, vx, vy, tx, ty, steps = 4000, dt = 1 / 240) {
   check('hasGlyph rejects an id with no art', !hasGlyph('trebuchet'));
 }
 
+// 19. Span headroom is the number the builder now shows, so it has to mean
+// what the material says. A run reaching out from a pillar should count down
+// to zero exactly at the material's limit, and timber should get there sooner
+// than stone.
+{
+  const c = new Castle();
+  for (let r = GRID_ROWS - 1; r >= 8; r--) c.place(10, r, 'stone');
+  for (let col = 11; col <= 13; col++) c.place(col, 8, 'stone');
+  let spans = c.computeSpans();
+  check('stone pillar has full headroom', c.spanHeadroom(10, 8, spans) === 3);
+  check('stone headroom counts down along a reach',
+    [11, 12, 13].map((col) => c.spanHeadroom(col, 8, spans)).join(',') === '2,1,0');
+
+  const t = new Castle();
+  for (let r = GRID_ROWS - 1; r >= 8; r--) t.place(10, r, 'wood');
+  for (let col = 11; col <= 12; col++) t.place(col, 8, 'wood');
+  spans = t.computeSpans();
+  check('timber runs out of headroom sooner than stone',
+    [11, 12].map((col) => t.spanHeadroom(col, 8, spans)).join(',') === '1,0');
+
+  // A block the solver rejects reports -1 rather than a misleading 0, so the
+  // builder can tell "at the limit" from "already falling".
+  const f = new Castle();
+  f.place(5, 3, 'stone');
+  check('a floating block reports no headroom at all',
+    f.spanHeadroom(5, 3, f.computeSpans()) === -1);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
