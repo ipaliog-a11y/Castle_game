@@ -15,15 +15,21 @@ import {
   xToCol,
   yToRow,
 } from '../core/config';
-import { BUILDABLE, MATERIALS, type MaterialId } from '../core/materials';
+import { BASE_MATERIALS, BUILDABLE, MATERIALS, isBase, type MaterialId } from '../core/materials';
 import { store } from '../core/store';
 import { CastleView } from '../ui/CastleView';
-import { drawGlyph } from '../ui/icons';
+import { BASE_GLYPH, drawGlyph } from '../ui/icons';
 import { BUTTON, FONT_SIZE, TOP_BAR_H } from '../ui/layout';
 import { COLORS, FONT, drawBackdrop, panel } from '../ui/theme';
 
 /** Palette entry: symbol on the left, name and price to its right. */
 const PALETTE = { w: 168, h: 52, gap: 8, glyph: 38 };
+/**
+ * Bases get a square, symbol-only button. They have no price to show, their
+ * glyph is already their identity — it is the same one their card wears — and
+ * seven full-width entries do not fit the bar beside the gold and BEGIN SIEGE.
+ */
+const BASE_BUTTON_W = 64;
 
 type Tool = MaterialId | 'erase';
 
@@ -88,11 +94,16 @@ export class BuildScene extends Phaser.Scene {
     }
     if (this.tool === 'erase') this.erase(col, row);
     else this.place(col, row, this.tool);
+    for (const fn of this.paletteRefresh) fn();
     this.redraw();
   }
 
   private place(col: number, row: number, mat: MaterialId): void {
     if (this.castle.has(col, row)) return;
+    if (isBase(mat) && this.castle.find(mat)) {
+      this.hint(`You already have a ${MATERIALS[mat].name}. Erase it to move it.`);
+      return;
+    }
     const cost = MATERIALS[mat].cost;
     if (this.spent + cost > BUILD_BUDGET) {
       this.hint('Out of gold. Erase something or start the siege.');
@@ -141,7 +152,14 @@ export class BuildScene extends Phaser.Scene {
     for (const mat of BUILDABLE) {
       x = this.paletteButton(x, mat, `${MATERIALS[mat].name} ${MATERIALS[mat].cost}g`);
     }
-    x = this.paletteButton(x + 10, 'erase', 'Erase');
+    // Bases cost nothing: where they go is the decision, not whether you can
+    // afford them. One of each, so the choice is placement and not quantity.
+    for (const mat of BASE_MATERIALS) {
+      x = this.paletteButton(x, mat, '', BASE_BUTTON_W);
+    }
+    // Erase is symbol-only too: a struck-out block needs no caption, and the
+    // full-width version pushed into the gold readout.
+    x = this.paletteButton(x + 10, 'erase', '', BASE_BUTTON_W);
 
     this.budgetText = this.add
       .text(WORLD_WIDTH - 236, midY, '', {
@@ -168,6 +186,16 @@ export class BuildScene extends Phaser.Scene {
       this.redraw();
     });
 
+    this.add
+      .text(
+        16,
+        TOP_BAR_H + 48,
+        'The yard, vat and bastion each give you a defence card — lose one in battle and the card goes with it.',
+        { fontFamily: FONT, fontSize: `${FONT_SIZE.small}px`, color: COLORS.dim },
+      )
+      .setOrigin(0, 0.5)
+      .setDepth(41);
+
     this.hintText = this.add
       .text(16, TOP_BAR_H + 22, '', {
         fontFamily: FONT,
@@ -183,8 +211,9 @@ export class BuildScene extends Phaser.Scene {
    * brick bond, a riveted plate — so which material is selected reads without
    * the name, and the dimmed symbol on an unselected entry says so too.
    */
-  private paletteButton(x: number, tool: Tool, text: string): number {
-    const { w, h, gap, glyph } = PALETTE;
+  private paletteButton(x: number, tool: Tool, text: string, width?: number): number {
+    const { h, gap, glyph } = PALETTE;
+    const w = width ?? PALETTE.w;
     const y = (TOP_BAR_H - h) / 2;
     const g = this.add.graphics().setDepth(41);
     const t = this.add
@@ -201,7 +230,17 @@ export class BuildScene extends Phaser.Scene {
       g.clear();
       const accent = tool === 'erase' ? 0xb05a4a : MATERIALS[tool].fill;
       panel(g, x, y, w, h, on ? 0x27314a : 0x161c28, on ? accent : 0x2b3243, 0.95, 6);
-      drawGlyph(g, tool, x + 12 + glyph / 2, y + h / 2, glyph, accent, on ? 1 : 0.45);
+      // Symbol-only buttons centre their glyph; labelled ones lead with it.
+      const gx = text ? x + 12 + glyph / 2 : x + w / 2;
+      // A base's glyph is its card's, so the palette, the block on the field
+      // and the card in your hand are all visibly the same thing.
+      drawGlyph(g, BASE_GLYPH[tool] ?? tool, gx, y + h / 2, glyph, accent, on ? 1 : 0.45);
+      // A base already placed reads as spent, so the palette shows the state of
+      // the castle and not just what is selected.
+      if (tool !== 'erase' && isBase(tool) && this.castle.find(tool)) {
+        g.fillStyle(0x6fce93, 0.9);
+        g.fillCircle(x + w - 10, y + 10, 5);
+      }
       t.setColor(on ? COLORS.text : COLORS.dim);
     };
     paint();

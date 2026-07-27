@@ -154,6 +154,24 @@ export class CardEngine {
     return card;
   }
 
+  /**
+   * Takes a card out of the game for good — its base has been destroyed.
+   *
+   * It leaves the draw pile, the discard and the hand together. Leaving a dead
+   * card sitting in the hand would look like a bug, and leaving copies in the
+   * deck would resurrect it on the next reshuffle.
+   */
+  destroy(cardId: string): boolean {
+    const before = this.draw.length + this.discard.length + this.hand.filter(Boolean).length;
+    this.draw = this.draw.filter((c) => c.id !== cardId);
+    this.discard = this.discard.filter((c) => c.id !== cardId);
+    for (let i = 0; i < this.hand.length; i++) {
+      if (this.hand[i]?.id === cardId) this.hand[i] = this.drawOne();
+    }
+    const after = this.draw.length + this.discard.length + this.hand.filter(Boolean).length;
+    return after < before;
+  }
+
   private drawOne(): CardDef | null {
     if (this.draw.length === 0) {
       if (this.discard.length === 0) return null;

@@ -55,7 +55,7 @@ export const UNITS: Record<UnitId, UnitDef> = {
  * game than spending as you go. 260 is a little over a full magazine.
  */
 export const GOLD_START = 190;
-export const GOLD_PER_SEC = 13;
+export const GOLD_PER_SEC = 10;
 export const GOLD_MAX = 260;
-export const SHOT_GOLD = 15;
+export const SHOT_GOLD = 18;
 export const SHOT_COOLDOWN_MS = 900;

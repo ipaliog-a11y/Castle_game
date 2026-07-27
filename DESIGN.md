@@ -128,6 +128,41 @@ reason: higher, and the moon sat on the hint text.
   back along the line until something is reachable, and the arc turns red to
   say so
 
+**Support bases — where the castle's own space earns its keep**
+
+Each defence card needs a building standing in your castle: a mason's yard for
+Masons, an oil vat for Boiling Oil, a bastion for Reinforce. Build it and you
+hold the card; lose it mid-battle and the card is struck from your hand and your
+deck for good.
+
+This exists to answer a real flaw. The build zone runs to column 38 but the
+throne sits at 35, so anything placed behind the throne could never be on the
+attacker's path — it was simply dead space, and the correct play was to shove
+everything forward. A mason's yard back there is worth a detour, and the moment
+the attacker has a reason to go somewhere, the ground on the way is worth
+fighting over.
+
+It gives the defender two decisions where there was none:
+
+- **Which cards do you even want?** No yard, no Masons. That makes the deck a
+  build decision without any of the collection meta that was retired.
+- **Cluster or spread?** Together at the back they are deep, but one breach that
+  reaches them takes all three. Apart, each is shallower but a breach costs one
+  card rather than the hand.
+
+Bases cost no gold — where they go is the decision, not whether you can afford
+them — and two of the three do a little of their card's job unprompted, so they
+still matter in a siege where nobody is holding cards. The attacker AI targets
+them deliberately; without that, nothing would ever attack one and the choice
+would never be tested.
+
+The block on the field, the button in the palette and the card in your hand all
+wear the same drawn symbol. That shared glyph is the whole explanation: the
+cauldron blows up, the cauldron in your hand goes with it.
+
+A castle saved before this existed has no bases at all, and is given the full
+deck rather than an empty hand.
+
 **Cards implemented**
 
 | Card | Side | Cost | Effect |

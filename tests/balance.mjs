@@ -26,7 +26,7 @@ import { chromium } from 'playwright';
 const BASE = process.env.GAME_URL || 'http://localhost:5173/';
 const SEED_COUNT = Number(process.env.SEEDS || 4);
 const BUDGET = 900;
-const COST = { wood: 5, stone: 15, iron: 45, throne: 0 };
+const COST = { wood: 5, stone: 15, iron: 45, throne: 0, masonsYard: 0, oilVat: 0, bastion: 0 };
 
 // Build zone is columns 20..38; the throne is fixed at (35, 15).
 const THRONE = [35, 15, 'throne'];
@@ -81,6 +81,24 @@ const ARCHETYPES = {
     for (const col of [22, 26, 30, 34, 38]) for (let r = 15; r >= 6; r--) put(col, r, 'stone');
     for (const row of [6, 10, 14]) for (let c = 20; c <= 38; c++) put(c, row, 'stone');
   }),
+
+  // The two rows that measure the support-base decision. Same wall, same gold,
+  // same three bases — only where they sit differs. Clustered they are deep but
+  // one breach reaches all three; spread they are shallower but a breach costs
+  // one card, not the hand.
+  'bases clustered': build((put) => {
+    put(37, 15, 'masonsYard');
+    put(38, 15, 'oilVat');
+    put(37, 14, 'bastion');
+    for (const col of [24, 27, 30, 33]) for (let r = 15; r >= 5; r--) put(col, r, 'stone');
+  }),
+
+  'bases spread': build((put) => {
+    put(21, 15, 'masonsYard');
+    put(29, 15, 'oilVat');
+    put(38, 15, 'bastion');
+    for (const col of [24, 27, 30, 33]) for (let r = 15; r >= 5; r--) put(col, r, 'stone');
+  }),
 };
 
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
@@ -119,6 +137,7 @@ async function battle(blocks, seed, mode) {
           // version did, makes "throne present" mean "the attacker lost".
           const startBlocks = s.castle.count();
           const throneAtStart = !!s.castle.find('throne');
+          const basesAtStart = s.basesAlive.size;
 
           /**
            * A stand-in for a competent attacker: shoot the lowest block that can
@@ -156,6 +175,8 @@ async function battle(blocks, seed, mode) {
             blocksLeft: s.castle.count(),
             startBlocks,
             hpLeft: Math.round(s.castle.all().reduce((sum, b) => sum + b.hp, 0)),
+            basesLeft: s.basesAlive.size,
+            basesAtStart,
             goldLeft: s.gold === undefined ? null : Math.round(s.gold),
           });
         }, 250);
@@ -197,14 +218,18 @@ for (const [name, blocks] of Object.entries(ARCHETYPES)) {
       timeToThrone: median(wins.map((r) => r.seconds)),
       blocksLeft: median(runs.map((r) => r.blocksLeft)),
       standing: median(runs.map((r) => r.blocksLeft / r.startBlocks)),
+      basesAtStart: runs[0].basesAtStart,
+      basesKept: median(runs.map((r) => r.basesLeft)),
     };
   }
   rows.push(row);
   process.stdout.write(`  ${name} done\n`);
 }
 
-console.log('\n  archetype       spend  blocks | AI attacks: win  survived  standing | bot attacks: win   time');
-console.log('  ' + '-'.repeat(99));
+console.log(
+  '\n  archetype       spend  blocks | AI attacks: win  survived  standing  bases | bot attacks: win   time',
+);
+console.log('  ' + '-'.repeat(107));
 for (const r of rows) {
   const d = r.Defend;
   const s = r.Siege;
@@ -217,6 +242,7 @@ for (const r of rows) {
       pct(d.winRate, 1).padStart(16) +
       `${d.timeToThrone === null ? '     -' : String(d.timeToThrone).padStart(6)}s` +
       pct(d.standing, 1).padStart(10) +
+      `${d.basesAtStart ? `${d.basesKept}/${d.basesAtStart}` : '  -'}`.padStart(7) +
       ' |' +
       pct(s.winRate, 1).padStart(17) +
       `${s.timeToThrone === null ? '      -' : String(s.timeToThrone).padStart(7)}s`,
@@ -227,6 +253,7 @@ console.log(`
   win     = how often the attacker destroyed the throne
   survived= median battle length when the attacker won
   standing= median share of the castle's blocks still up at the end
+  bases   = support bases still standing at the end, of those built
 `);
 if (errors.length) console.log('  page errors:', errors.slice(0, 5));
 

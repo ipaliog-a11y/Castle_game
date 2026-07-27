@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import type { Block, Castle } from '../core/castle';
 import { CELL, GRID_COLS, colToX, rowToY } from '../core/config';
 import { MATERIALS, type MaterialId } from '../core/materials';
+import { BASE_GLYPH, drawGlyph } from './icons';
 
 /** Renders the castle grid. Both the builder and the siege use this. */
 export class CastleView {
@@ -66,6 +67,12 @@ export class CastleView {
     g.fillRect(x, y, CELL, 3);
     g.fillStyle(0x000000, 0.16);
     g.fillRect(x, y + CELL - 4, CELL, 4);
+
+    // A base wears its card's symbol, so losing one reads as losing the card.
+    const glyph = BASE_GLYPH[block.mat];
+    if (glyph) {
+      drawGlyph(g, glyph, x + CELL / 2, y + CELL / 2, CELL - 6, 0xf2f5fb, 0.55 + health * 0.45);
+    }
 
     g.lineStyle(1, unsupported ? 0xe5654f : def.stroke, unsupported ? 1 : 0.85);
     g.strokeRect(x + 0.5, y + 0.5, CELL - 1, CELL - 1);

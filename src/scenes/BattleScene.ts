@@ -15,7 +15,7 @@ import {
   xToCol,
   yToRow,
 } from '../core/config';
-import { MATERIALS, type MaterialId } from '../core/materials';
+import { MATERIALS, cardForBase, isBase, type MaterialId } from '../core/materials';
 import { Rng, seedFromUrl } from '../core/rng';
 import { store, type PlayerSide } from '../core/store';
 import { UNITS, type UnitDef, type UnitId } from '../core/units';
@@ -45,6 +45,9 @@ export const STEP_MS = 1000 / 60;
  * battle simply loses that time instead.
  */
 const MAX_CATCHUP_MS = 250;
+
+/** How often the standing bases do their passive work. */
+const BASE_PULSE_MS = 4000;
 
 export interface Ball {
   x: number;
@@ -152,6 +155,11 @@ export abstract class BattleScene extends Phaser.Scene {
   /** Battle-time stamp past which the rally buff has expired. */
   protected rallyUntil = 0;
 
+  /** Base blocks still standing, by the card each one powers. */
+  protected basesAlive = new Set<string>();
+  /** Next battle time at which the standing bases do their passive work. */
+  private baseTick = 0;
+
   /** Which side the human is playing, for the result screen. */
   protected abstract readonly playerSide: PlayerSide;
 
@@ -180,6 +188,12 @@ export abstract class BattleScene extends Phaser.Scene {
     this.finished = false;
     this.castleDamageMul = 1;
     this.rallyUntil = 0;
+    this.baseTick = BASE_PULSE_MS;
+    this.basesAlive = new Set();
+    for (const block of this.castle.all()) {
+      const card = cardForBase(block.mat);
+      if (card) this.basesAlive.add(card);
+    }
 
     this.sky = new SkyView(this, WORLD_WIDTH, WORLD_HEIGHT, GROUND_Y);
     this.sky.draw(0);
@@ -225,6 +239,7 @@ export abstract class BattleScene extends Phaser.Scene {
     this.elapsed += STEP_MS;
     this.timeLeft -= STEP_MS;
 
+    this.pulseBases();
     this.onTick(dt, STEP_MS);
 
     this.updateBalls(dt);
@@ -337,13 +352,15 @@ export abstract class BattleScene extends Phaser.Scene {
     }
     this.burst(x, y, 16, 0xffd08a, 220);
     this.reportHit(x, y, dealt, destroyed.length);
+    this.reconcileBases();
     this.cameras.main.shake(Math.min(220, 60 + damage), 0.002 + Math.min(0.006, damage / 40000));
     this.collapse();
   }
 
   /** Turns every block that lost its support chain into falling debris. */
   protected collapse(): void {
-    for (const block of this.castle.findUnsupported()) {
+    const falling = this.castle.findUnsupported();
+    for (const block of falling) {
       this.castle.remove(block.col, block.row);
       this.debris.push({
         x: colToX(block.col),
@@ -356,6 +373,7 @@ export abstract class BattleScene extends Phaser.Scene {
         hitUnits: new Set(),
       });
     }
+    if (falling.length > 0) this.reconcileBases();
   }
 
   private updateDebris(dt: number): void {
@@ -498,6 +516,50 @@ export abstract class BattleScene extends Phaser.Scene {
       if (this.castle.has(col, row)) return rowToY(row);
     }
     return GROUND_Y;
+  }
+
+  /**
+   * What the bases do on their own.
+   *
+   * Small, and deliberately the same job as the card they power — a mason's
+   * yard patches, an oil vat scalds. Without this they would be inert in a
+   * siege, where nobody is holding cards, and the whole point of the mechanic
+   * is that the ground they stand on is worth fighting over in both modes.
+   */
+  private pulseBases(): void {
+    if (this.elapsed < this.baseTick) return;
+    this.baseTick = this.elapsed + BASE_PULSE_MS;
+
+    for (const block of this.castle.all()) {
+      if (!isBase(block.mat)) continue;
+      const x = colToX(block.col) + CELL / 2;
+      const y = rowToY(block.row) + CELL / 2;
+      if (block.mat === 'masonsYard') this.repairArea(x, y, 2.5, 0.05);
+      else if (block.mat === 'oilVat') this.damageUnitsInRadius(x, y, 2.2, 24);
+    }
+  }
+
+  /**
+   * Called once for each base destroyed this frame. `collapse` and `explode`
+   * both route through here so a base lost to a falling tower counts the same
+   * as one shot off the wall.
+   */
+  protected onBaseLost(_card: string): void {}
+
+  /** Notices bases that have stopped existing since the last check. */
+  private reconcileBases(): void {
+    if (this.basesAlive.size === 0) return;
+    const standing = new Set<string>();
+    for (const block of this.castle.all()) {
+      const card = cardForBase(block.mat);
+      if (card) standing.add(card);
+    }
+    for (const card of [...this.basesAlive]) {
+      if (!standing.has(card)) {
+        this.basesAlive.delete(card);
+        this.onBaseLost(card);
+      }
+    }
   }
 
   // ------------------------------------------------------- defensive tools

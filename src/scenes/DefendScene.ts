@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { solveLaunchAdaptive } from '../core/ballistics';
-import { CardEngine, DEFENSE_DECK, type CardDef } from '../core/cards';
+import { CARDS, CardEngine, DEFENSE_DECK, type CardDef } from '../core/cards';
 import {
   CANNON_X,
   CANNON_Y,
@@ -10,6 +10,7 @@ import {
   colToX,
   rowToY,
 } from '../core/config';
+import { CARD_BASES, MATERIALS, isBase } from '../core/materials';
 import type { PlayerSide } from '../core/store';
 import type { UnitId } from '../core/units';
 import { CardBar } from '../ui/CardBar';
@@ -71,10 +72,34 @@ export class DefendScene extends BattleScene {
     // Above the card column, so a targeting circle dragged over the hand is
     // still visible where it matters.
     this.overlay = this.add.graphics().setDepth(55);
-    this.cards = new CardEngine(DEFENSE_DECK, { start: 6, regenPerSec: 1.15, rng: this.rng });
+    this.cards = new CardEngine(this.availableDeck(), {
+      start: 6,
+      regenPerSec: 1.15,
+      rng: this.rng,
+    });
     this.buildHud();
     this.bindInput();
     this.view.draw();
+  }
+
+  /**
+   * The hand you built. Each defence card needs its base standing in the
+   * castle, so which cards you hold is decided in the build phase.
+   *
+   * A castle with no bases at all is treated as pre-dating the mechanic and
+   * gets the full deck. Silently handing someone an empty hand because their
+   * saved castle is older than the feature would be a nasty way to find out.
+   */
+  private availableDeck(): string[] {
+    if (this.basesAlive.size === 0) return DEFENSE_DECK;
+    return DEFENSE_DECK.filter((id) => this.basesAlive.has(id));
+  }
+
+  /** A base has been destroyed; the card it powered goes with it. */
+  protected override onBaseLost(card: string): void {
+    if (!this.cards?.destroy(card)) return;
+    const name = CARDS[card]?.name ?? card;
+    this.flash(`${MATERIALS[CARD_BASES[card]].name} destroyed — ${name} is lost.`);
   }
 
   // ------------------------------------------------------------------- ai
@@ -115,7 +140,7 @@ export class DefendScene extends BattleScene {
           at: this.elapsed + TELEGRAPH_MS,
         };
       }
-      this.reloadTimer = this.rng.between(1900 - 1000 * p, 2600 - 1300 * p);
+      this.reloadTimer = this.rng.between(1500 - 800 * p, 2100 - 1000 * p);
     }
 
     this.waveTimer -= deltaMs;
@@ -140,6 +165,17 @@ export class DefendScene extends BattleScene {
     const throne = this.castle.find('throne');
     if (throne && this.rng.chance(0.2)) {
       const at = { x: colToX(throne.col) + CELL / 2, y: rowToY(throne.row) + CELL / 2 };
+      if (this.solveFor(at.x, at.y)) return at;
+    }
+
+    // Go for a support base sometimes. Without this nothing ever attacks one on
+    // purpose, so the defender's choice of where to put them would never be
+    // tested — and killing the mason's yard early is exactly what a thinking
+    // attacker does, because it stops the walls healing behind them.
+    const bases = blocks.filter((b) => isBase(b.mat));
+    if (bases.length > 0 && this.rng.chance(0.3)) {
+      const pick = bases[this.rng.between(0, bases.length - 1)];
+      const at = { x: colToX(pick.col) + CELL / 2, y: rowToY(pick.row) + CELL / 2 };
       if (this.solveFor(at.x, at.y)) return at;
     }
 
@@ -193,7 +229,7 @@ export class DefendScene extends BattleScene {
     this.lastAngle = Math.atan2(shot.vy, shot.vx);
     this.shotsFired++;
     const heavy = this.rng.chance(0.25 + this.pressure() * 0.25);
-    this.launch(shot.vx, shot.vy, heavy ? 110 : 62, heavy ? 1.9 : 1.25);
+    this.launch(shot.vx, shot.vy, heavy ? 75 : 42, heavy ? 1.9 : 1.25);
   }
 
   private sendWave(p: number): void {

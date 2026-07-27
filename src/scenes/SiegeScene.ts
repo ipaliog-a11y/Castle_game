@@ -204,7 +204,7 @@ export class SiegeScene extends BattleScene {
       this.launch(
         vx * cos - vy * sin,
         vx * sin + vy * cos,
-        powered ? 150 : this.shotMod === 'chain' ? 38 : 62,
+        powered ? 105 : this.shotMod === 'chain' ? 26 : 42,
         powered ? 2.3 : 1.25,
       );
     }

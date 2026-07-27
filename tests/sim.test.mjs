@@ -174,7 +174,9 @@ const econ = await probe(() => {
   s.fire(); // still on cooldown, must be a no-op
   return { spent, balls, afterSecondFire: s.balls.length };
 });
-check('a shot costs gold', econ.spent === 15, JSON.stringify(econ));
+// Asserts that firing charges *something*, not what the price is. Pinning the
+// number here means every balance pass breaks a test that is not about balance.
+check('a shot costs gold', econ.spent > 0, JSON.stringify(econ));
 check('a shot spawns one ball', econ.balls === 1, JSON.stringify(econ));
 check('cooldown blocks an immediate second shot', econ.afterSecondFire === 1, JSON.stringify(econ));
 
