@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { audio } from '../core/audio';
 import { Castle, type CastleSave } from '../core/castle';
 import {
   BUILD_BUDGET,
@@ -20,7 +21,7 @@ import { store } from '../core/store';
 import { CastleView } from '../ui/CastleView';
 import { BASE_GLYPH, drawGlyph } from '../ui/icons';
 import { BUTTON, FONT_SIZE, TOP_BAR_H } from '../ui/layout';
-import { COLORS, FONT, drawBackdrop, panel } from '../ui/theme';
+import { COLORS, FONT, drawBackdrop, panel, soundButton } from '../ui/theme';
 
 /** Palette entry: symbol on the left, name and price to its right. */
 const PALETTE = { w: 168, h: 52, gap: 8, glyph: 38 };
@@ -130,6 +131,7 @@ export class BuildScene extends Phaser.Scene {
     this.spent += cost;
     this.history.push({ placed: [[col, row]], removed: [] });
     this.hint('');
+    audio.play('place');
 
     // A block that had to reach sideways to stand is the interesting case — it
     // is the rule working, and worth noticing rather than merely permitting.
@@ -157,6 +159,9 @@ export class BuildScene extends Phaser.Scene {
     this.spent = Math.max(0, this.spent);
     this.history.push({ placed: [], removed });
     this.hint('');
+    // Louder when the erase brought a tower down with it, which is the case
+    // worth hearing before you look.
+    audio.play('erase', { gain: removed.length > 3 ? 1 : 0.6 });
   }
 
   /**
@@ -181,6 +186,7 @@ export class BuildScene extends Phaser.Scene {
       if (this.castle.place(col, row, mat)) this.spent += MATERIALS[mat].cost;
     }
     this.spent = Math.max(0, this.spent);
+    audio.play('erase', { gain: 0.5 });
     for (const fn of this.paletteRefresh) fn();
     this.redraw();
   }
@@ -202,6 +208,7 @@ export class BuildScene extends Phaser.Scene {
         onComplete: () => dot.destroy(),
       });
     }
+    audio.play('gold', { rate: 1.35 });
     this.hint('Nice overhang!');
   }
 
@@ -261,6 +268,10 @@ export class BuildScene extends Phaser.Scene {
       )
       .setOrigin(0, 0.5)
       .setDepth(41);
+
+    // Bottom-left, which is the one large empty region in the builder: the
+    // build zone starts at column 20, half the world away.
+    soundButton(this, 60, WORLD_HEIGHT - 60);
 
     this.hintText = this.add
       .text(16, TOP_BAR_H + 22, '', {

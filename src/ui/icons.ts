@@ -303,7 +303,52 @@ const GLYPHS: Record<string, (c: Ctx) => void> = {
     g.fillRect(px(-6), py(-28), s(12), s(50));
     g.fillRect(px(-24), py(-14), s(48), s(12));
   },
+
+  // ----------------------------------------------------------------- sound
+
+  /** A speaker cone with two waves coming off it. */
+  soundOn({ g, px, py, s, accent, alpha }) {
+    speakerCone(g, px, py, s, accent, alpha);
+    g.lineStyle(s(6), accent, alpha);
+    for (const r of [26, 40]) {
+      g.beginPath();
+      g.arc(px(4), py(0), s(r), -0.85, 0.85, false);
+      g.strokePath();
+    }
+  },
+
+  /** The same cone with a cross where the waves were. */
+  soundOff({ g, px, py, s, accent, alpha }) {
+    speakerCone(g, px, py, s, accent, alpha);
+    g.lineStyle(s(7), accent, alpha);
+    g.beginPath();
+    g.moveTo(px(16), py(-16));
+    g.lineTo(px(44), py(16));
+    g.moveTo(px(44), py(-16));
+    g.lineTo(px(16), py(16));
+    g.strokePath();
+  },
 };
+
+/** Shared body of the two speaker glyphs: a box with a flared cone on it. */
+function speakerCone(
+  g: Phaser.GameObjects.Graphics,
+  px: (n: number) => number,
+  py: (n: number) => number,
+  s: (n: number) => number,
+  accent: number,
+  alpha: number,
+): void {
+  g.fillStyle(accent, alpha);
+  g.fillRect(px(-40), py(-13), s(20), s(26));
+  g.beginPath();
+  g.moveTo(px(-20), py(-13));
+  g.lineTo(px(-2), py(-38));
+  g.lineTo(px(-2), py(38));
+  g.lineTo(px(-20), py(13));
+  g.closePath();
+  g.fillPath();
+}
 
 /**
  * Base blocks wear the symbol of the card they power. That shared glyph is the

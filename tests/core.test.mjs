@@ -2,7 +2,7 @@ import { Castle } from '../src/core/castle.ts';
 import { GRID_COLS, GRID_ROWS } from '../src/core/config.ts';
 import { solveLaunch, solveLaunchAdaptive } from '../src/core/ballistics.ts';
 import { CARDS, DEFENSE_DECK, OFFENSE_DECK } from '../src/core/cards.ts';
-import { BUILDABLE } from '../src/core/materials.ts';
+import { BUILDABLE, MATERIALS } from '../src/core/materials.ts';
 import { UNITS } from '../src/core/units.ts';
 import { hasGlyph } from '../src/ui/icons.ts';
 
@@ -219,6 +219,8 @@ function simulate(x0, y0, vx, vy, tx, ty, steps = 4000, dt = 1 / 240) {
     BUILDABLE.every((id) => hasGlyph(id)),
   );
   check('the erase tool has a glyph', hasGlyph('erase'));
+  check('both states of the mute toggle have a glyph',
+    hasGlyph('soundOn') && hasGlyph('soundOff'));
   check(
     `every troop type has a glyph (${Object.keys(UNITS).length} checked)`,
     Object.keys(UNITS).every((id) => hasGlyph(id)),
@@ -254,6 +256,33 @@ function simulate(x0, y0, vx, vy, tx, ty, steps = 4000, dt = 1 / 240) {
   f.place(5, 3, 'stone');
   check('a floating block reports no headroom at all',
     f.spanHeadroom(5, 3, f.computeSpans()) === -1);
+}
+
+
+// 20. Every material names the sound it makes when it is hit. TypeScript checks
+// that the name is a valid SoundId at compile time, but not that the value is
+// there at all — a material added with the field left off type-errors only if
+// someone is running tsc, and this suite runs on plain node. The distinctness
+// check is the design intent: telling timber from stone by ear is the point of
+// having three sounds rather than one.
+{
+  const mats = Object.values(MATERIALS);
+  check(
+    `every material names an impact sound (${mats.length} checked)`,
+    mats.every((m) => typeof m.sound === 'string' && m.sound.length > 0),
+    mats.filter((m) => !m.sound).map((m) => m.id).join(', '),
+  );
+  const buildable = BUILDABLE.map((id) => MATERIALS[id].sound);
+  check(
+    'the three buildable materials sound different from each other',
+    new Set(buildable).size === BUILDABLE.length,
+    buildable.join(', '),
+  );
+  check(
+    'the throne does not share its sound with a wall',
+    !buildable.includes(MATERIALS.throne.sound),
+    MATERIALS.throne.sound,
+  );
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

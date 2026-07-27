@@ -213,16 +213,36 @@ structure rule discoverable instead of enforced.
 - **A sparkle and a word** when a placed block reaches 2 or more cells out, so a
   successful overhang gets noticed rather than merely allowed.
 
-### 6.6 Sound
+### 6.6 Sound — **done**
 
-There is no audio at all, which is the single largest gap in how the game feels.
-A collapse you hear is worth more than a collapse rendered better.
+Eighteen voices, all synthesized with the Web Audio API rather than loaded:
+cannon fire, a distinct impact per material, the throne's own gong, a rumble
+for a collapse, rubble, melee, the two base passives, a card whoosh, an income
+plink, build-phase taps, and three endings. `src/core/audio.ts`, with the
+reasoning; `ASSETS.md` now exists and records that the game ships no asset
+files at all.
 
-Cannon fire, ball impact on each material, a wall giving way, melee, the throne
-falling, victory and defeat. Web Audio through Phaser's sound manager.
+Not through Phaser's sound manager, as this section originally assumed — that
+is a player for loaded files and there is nothing to load. The engine talks to
+Web Audio directly.
 
-Source everything CC0 or synthesize it, and record provenance in `ASSETS.md` as
-it lands — see *Guardrails*.
+Three things worth carrying forward:
+
+- **Voice management is the whole problem.** A shell landing in a wall damages
+  a dozen blocks; a collapsing tower lands a dozen pieces of rubble. Played
+  faithfully each of those is a burst that reads as a glitch. A per-sound
+  minimum gap, measured in real milliseconds, collapses them — and folds the
+  fixed timestep's catch-up bursts along with them.
+- **A blast plays one material, not all of them.** Whichever took the most
+  damage, except that the throne always wins. One sound means one event.
+- **Audio must not be able to change the battle.** It draws only from
+  `Math.random`, and nothing in the simulation reads it back.
+  `tests/determinism.test.mjs` now runs the same seed silent and loud and
+  requires the two battles to be identical block for block.
+
+Left undone: no music, and no mute control inside a battle — the toggle is on
+the menu, builder and result screens, because the battle top bar is already
+over its touch-target budget and a phone's volume switch is faster anyway.
 
 ### 6.7 Impact polish
 

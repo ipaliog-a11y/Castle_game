@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { audio } from '../core/audio';
 import { solveLaunchAdaptive } from '../core/ballistics';
 import { CARDS, CardEngine, DEFENSE_DECK, type CardDef } from '../core/cards';
 import {
@@ -266,6 +267,7 @@ export class DefendScene extends BattleScene {
     }
     const played = this.cards.play(slot);
     if (!played) return;
+    audio.play('whoosh');
 
     if (played.id === 'reinforce') {
       this.castleDamageMul = 0.6;
@@ -280,6 +282,7 @@ export class DefendScene extends BattleScene {
     if (!card) return;
     const played = this.cards.play(slot);
     if (!played) return;
+    audio.play('whoosh');
 
     if (played.id === 'repair') {
       const healed = this.repairArea(worldX, worldY, played.radius ?? 2.5, 0.45);

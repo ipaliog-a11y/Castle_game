@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { audio } from '../core/audio';
 import { solveLaunchAdaptive } from '../core/ballistics';
 import { CardEngine, OFFENSE_DECK, type CardDef } from '../core/cards';
 import {
@@ -29,6 +30,9 @@ import { BALL_GRAVITY, STEP_MS, BattleScene } from './BattleScene';
 
 const MIN_SHOT_SPEED = 300;
 const MAX_SHOT_SPEED = 1100;
+
+/** Gold earned between income plinks. */
+const GOLD_CHIME = 25;
 
 /** Muzzle, where every shot and every preview starts. */
 const MUZZLE_X = CANNON_X + 22;
@@ -235,6 +239,7 @@ export class SiegeScene extends BattleScene {
     }
     const played = this.cards.play(slot);
     if (!played) return;
+    audio.play('whoosh');
 
     if (played.id === 'chainShot') {
       this.shotMod = 'chain';
@@ -254,6 +259,7 @@ export class SiegeScene extends BattleScene {
     if (!card) return;
     const played = this.cards.play(slot);
     if (!played) return;
+    audio.play('whoosh');
 
     if (played.id === 'sapperCharge') {
       this.explode(worldX, worldY, 170, played.radius ?? 1.6);
@@ -265,7 +271,17 @@ export class SiegeScene extends BattleScene {
 
   protected onTick(dt: number, deltaMs: number): void {
     this.cooldown = Math.max(0, this.cooldown - deltaMs);
+
+    // Income plinks once per `GOLD_CHIME` earned rather than per frame, so it
+    // reads as a purse filling instead of a Geiger counter. At 10g/s that is
+    // about one every two and a half seconds — and it stops entirely at the
+    // cap, which is the useful part: silence means gold is going to waste.
+    const before = this.gold;
     this.gold = Math.min(GOLD_MAX, this.gold + GOLD_PER_SEC * dt);
+    if (Math.floor(this.gold / GOLD_CHIME) > Math.floor(before / GOLD_CHIME)) {
+      audio.play('gold');
+    }
+
     this.cards.update(deltaMs);
   }
 

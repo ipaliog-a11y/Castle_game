@@ -126,6 +126,10 @@ async function battle(blocks, seed, mode) {
 
   return page.evaluate(
     ([key]) => {
+      // Thousands of steps a second with nobody listening. The sound pack is
+      // inert as far as the simulation is concerned, so turning it off cannot
+      // change a number in this report — see tests/determinism.test.mjs.
+      window.__audio.enabled = false;
       const game = window.__game;
       for (const s of ['Menu', 'Build', 'Siege', 'Defend', 'Result']) game.scene.stop(s);
       game.scene.start(key);

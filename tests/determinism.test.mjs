@@ -12,7 +12,13 @@
 import { chromium } from 'playwright';
 
 const BASE = process.env.GAME_URL || 'http://localhost:5173/';
-const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
+// Autoplay is unblocked so a run can be driven with the sound pack genuinely
+// running. That is the point of the audio pair below: a silent run and a noisy
+// one must produce the same battle.
+const browser = await chromium.launch({
+  executablePath: process.env.CHROMIUM_PATH || undefined,
+  args: ['--autoplay-policy=no-user-gesture-required'],
+});
 
 let pass = 0;
 let fail = 0;
@@ -44,7 +50,7 @@ for (let c = 24; c <= 28; c++) blocks.push([c, 11, 'wood']);
  * timestamp* is reproducible, because a fixed timestep means the state after N
  * total steps is the same however those steps were distributed across frames.
  */
-async function runBattle(seed, untilMs) {
+async function runBattle(seed, untilMs, audioOn = false) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 640 } });
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -58,7 +64,14 @@ async function runBattle(seed, untilMs) {
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForTimeout(900);
 
-  const state = await page.evaluate((n) => {
+  const state = await page.evaluate(([n, withAudio]) => {
+    if (withAudio) {
+      window.__audio.enabled = true;
+      window.__audio.setMuted(false);
+      window.__audio.unlock();
+    } else {
+      window.__audio.enabled = false;
+    }
     const game = window.__game;
     game.scene.stop('Menu');
     game.scene.start('Defend');
@@ -82,10 +95,12 @@ async function runBattle(seed, untilMs) {
           balls: scene.balls.map((b) => `${b.x.toFixed(4)},${b.y.toFixed(4)}`),
           shotsFired: scene.shotsFired,
           wavesSent: scene.wavesSent,
+          audioRunning: window.__audio.running,
+          soundsPlayed: window.__audio.played,
         });
       }, 400);
     });
-  }, untilMs);
+  }, [untilMs, audioOn]);
 
   await page.close();
   return { state, errors };
@@ -119,6 +134,28 @@ check('same seed: troops in identical positions', same(a.state.units, b.state.un
 check('same seed: shells mid-flight identical', same(a.state.balls, b.state.balls));
 check('same seed: the AI fired and sent the same number of everything',
   a.state.shotsFired === b.state.shotsFired && a.state.wavesSent === b.state.wavesSent);
+
+// The sound pack must be inert as far as the simulation is concerned: it draws
+// only from Math.random, and nothing in the game reads it back. If either of
+// those ever stops being true, this is the check that notices.
+const loud = await runBattle(4821, UNTIL_MS, true);
+check('the noisy run really made noise', loud.state.audioRunning && loud.state.soundsPlayed > 3,
+  `running=${loud.state.audioRunning}, voices=${loud.state.soundsPlayed}`);
+check('the silent run made none', a.state.soundsPlayed === 0, `${a.state.soundsPlayed} voices`);
+// The count above is small — single figures for a whole battle — and that is
+// the voice limiter, not a fault. This driver runs 2400 fixed steps inside a
+// few milliseconds of wall clock, and the throttle is measured in real time, so
+// it folds almost the entire battle into one burst. The same mechanism is what
+// keeps a shell landing in a wall from firing a dozen impacts at once when the
+// game is played at frame rate.
+check('the throttle held: nowhere near one voice per step',
+  loud.state.soundsPlayed < 200,
+  `${loud.state.soundsPlayed} voices from ~2400 steps`);
+check('sound changes nothing: same seed with audio on is the same battle',
+  same(a.state.blocks, loud.state.blocks) &&
+    same(a.state.units, loud.state.units) &&
+    a.state.shotsFired === loud.state.shotsFired,
+  `hp ${a.state.totalHp} silent vs ${loud.state.totalHp} loud`);
 
 check('a different seed produces a different battle',
   !same(a.state.blocks, c.state.blocks) || a.state.shotsFired !== c.state.shotsFired,

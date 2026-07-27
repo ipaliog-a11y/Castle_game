@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { audio } from '../core/audio';
 import type { Block, Castle } from '../core/castle';
 import {
   CANNON_X,
@@ -276,6 +277,9 @@ export abstract class BattleScene extends Phaser.Scene {
     });
     this.burst(CANNON_X + 26, CANNON_Y - 10, 10, 0xffcb6b, 160);
     this.cameras.main.shake(90, 0.003);
+    // Chain Shot calls this three times in a row; the throttle in the audio
+    // engine folds those into the single report they should be.
+    audio.play('cannon', { gain: Math.min(1, 0.6 + damage / 160) });
   }
 
   private updateBalls(dt: number): void {
@@ -312,6 +316,15 @@ export abstract class BattleScene extends Phaser.Scene {
     const reach = Math.ceil(radiusCells);
     const destroyed: Block[] = [];
     let dealt = 0;
+    /**
+     * The material that took the most of this blast, which is what the hit gets
+     * to sound like. One shell can span timber, stone and iron; playing all
+     * three is a clatter that says less than any one of them, and the material
+     * that absorbed the most is the one the player was aiming at.
+     */
+    let loudest: MaterialId | null = null;
+    let loudestDealt = 0;
+    const perMaterial = new Map<MaterialId, number>();
 
     for (let dc = -reach; dc <= reach; dc++) {
       for (let dr = -reach; dr <= reach; dr++) {
@@ -322,12 +335,19 @@ export abstract class BattleScene extends Phaser.Scene {
         const distCells = Math.hypot(bx - x, by - y) / CELL;
         if (distCells > radiusCells) continue;
         const falloff = 1 - (distCells / radiusCells) * 0.65;
+        const mat = block.mat;
         const hit = this.castle.damage(
           block,
           damage * falloff * this.castleDamageMul,
           'blast',
         );
         dealt += hit.applied;
+        const total = (perMaterial.get(mat) ?? 0) + hit.applied;
+        perMaterial.set(mat, total);
+        if (total > loudestDealt) {
+          loudestDealt = total;
+          loudest = mat;
+        }
         if (hit.killed) destroyed.push(hit.killed);
       }
     }
@@ -351,6 +371,17 @@ export abstract class BattleScene extends Phaser.Scene {
       );
     }
     this.burst(x, y, 16, 0xffd08a, 220);
+
+    // The throne overrides the "loudest material" rule. It is the thing the
+    // whole battle is about, so a shell that clips it should say so even when a
+    // wall beside it soaked up more of the blast.
+    const voiced = perMaterial.has('throne') ? 'throne' : loudest;
+    if (voiced) {
+      audio.play(MATERIALS[voiced].sound, { gain: Math.min(1, 0.45 + dealt / 130) });
+    } else {
+      audio.play('hitGround', { gain: 0.8 });
+    }
+
     this.reportHit(x, y, dealt, destroyed.length);
     this.reconcileBases();
     this.cameras.main.shake(Math.min(220, 60 + damage), 0.002 + Math.min(0.006, damage / 40000));
@@ -360,6 +391,12 @@ export abstract class BattleScene extends Phaser.Scene {
   /** Turns every block that lost its support chain into falling debris. */
   protected collapse(): void {
     const falling = this.castle.findUnsupported();
+    // Three blocks is the threshold for the rumble, because one or two coming
+    // down is a chip and the impact that caused it has already been heard. A
+    // tower going over is a different event and deserves a different sound.
+    if (falling.length >= 3) {
+      audio.play('collapse', { gain: Math.min(1, 0.45 + falling.length / 16) });
+    }
     for (const block of falling) {
       this.castle.remove(block.col, block.row);
       this.debris.push({
@@ -415,6 +452,12 @@ export abstract class BattleScene extends Phaser.Scene {
         } else {
           this.burst(d.x + CELL / 2, restY + CELL / 2, 8, MATERIALS[d.mat].fill, 150);
         }
+        // Pitched by how far it fell, so a piece dropping off a high tower
+        // lands harder than one that shifted a cell.
+        audio.play('rubble', {
+          gain: Phaser.Math.Clamp(0.3 + fall / (CELL * 8), 0.3, 1),
+          rate: Phaser.Math.Clamp(1.25 - fall / (CELL * 12), 0.7, 1.25),
+        });
         this.debris.splice(i, 1);
         this.cameras.main.shake(60, 0.0015);
         this.collapse();
@@ -494,6 +537,7 @@ export abstract class BattleScene extends Phaser.Scene {
               u.dealt,
               hit.killed ? 1 : 0,
             );
+            audio.play('melee', { rate: u.def.id === 'sapper' ? 0.8 : 1.15 });
             u.dealt = 0;
           }
           if (!this.castle.has(aheadCol, feetRow)) this.collapse();
@@ -574,6 +618,7 @@ export abstract class BattleScene extends Phaser.Scene {
       this.burst(unit.x, unit.feetY - unit.def.height / 2, 8, 0xe07b2a, 170);
       hits++;
     }
+    if (hits > 0) audio.play('oil');
     return hits;
   }
 
@@ -596,6 +641,7 @@ export abstract class BattleScene extends Phaser.Scene {
         healed++;
       }
     }
+    if (healed > 0) audio.play('repair');
     return healed;
   }
 
@@ -775,6 +821,19 @@ export abstract class BattleScene extends Phaser.Scene {
   protected finishBattle(attackerWon: boolean): void {
     if (this.finished) return;
     this.finished = true;
+
+    /**
+     * Both endings the player can be pleased about get a happy sound, and they
+     * are different happy sounds because they are different achievements: a
+     * fanfare for bringing the throne down, a settled chime for holding.
+     *
+     * Keyed on whether *the player* won rather than on what happened to the
+     * throne. A cheerful fanfare over the ruins of your own castle would be the
+     * game laughing at you.
+     */
+    const playerWon = this.playerSide === 'defend' ? !attackerWon : attackerWon;
+    audio.play(playerWon ? (attackerWon ? 'fanfare' : 'chime') : 'defeat');
+
     store.lastResult = {
       attackerWon,
       seed: this.rng.seed,
