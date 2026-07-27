@@ -194,10 +194,24 @@ numbers.
 
 Still word-only:
 
-- **`maxSpan`** — how far a material can cantilever, which is the number that
-  actually decides a castle, and is invisible in the palette. Pips rather than a
-  digit would keep it pictorial.
 - **Win and lose**, which are a sentence on the result screen.
+
+`maxSpan` used to be on this list — how far a material can cantilever, the
+number that actually decides a castle, and invisible. It is now drawn on every
+block in the build phase as a headroom bar rather than a digit; see DESIGN.md.
+
+### 6.5b Build phase you can experiment in — **done**
+
+Three changes, all in the builder, all aimed at the same thing: making the
+structure rule discoverable instead of enforced.
+
+- **Span headroom bars** on every block — green, amber, red as a block
+  approaches its material's reach. This is the "stress view" 6.7 listed as a
+  debug tool; it turned out to be a build-phase tool.
+- **Undo** one placement or one erase, restoring orphaned blocks and their gold.
+  Erasing was the destructive one — a pillar took its whole tower with it.
+- **A sparkle and a word** when a placed block reaches 2 or more cells out, so a
+  successful overhang gets noticed rather than merely allowed.
 
 ### 6.6 Sound
 
@@ -219,9 +233,13 @@ their hitpoints fall, so this is a short list rather than a system:
 - A brief hit stop on a large collapse — the pause is what sells the weight.
 - Cracks at hitpoint thresholds rather than a smooth tint, so damage reads at a
   glance instead of on inspection.
-- A stress view during the build phase, drawing each block's span headroom. It
-  is the debug view for the solver and probably also a real build-phase tool:
-  the model's most interesting number is currently invisible.
+- A camera punch and a brief hit stop on a large collapse, plus a floating
+  "CRASH!" when one hit takes four or more blocks. Both must live in the draw
+  half of the loop, never in `step()` — a hit stop inside the fixed step would
+  desynchronise the seed and silently invalidate the balance harness.
+
+The stress view this section used to list is done and shipped in the builder;
+see 6.5b.
 
 ---
 

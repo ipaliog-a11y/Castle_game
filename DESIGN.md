@@ -53,6 +53,42 @@ settles as rubble. Rubble piles are real blocks afterward, so a collapsed tower
 becomes an obstacle that slows the next wave. That was not designed in; it fell
 out of the model, and it is worth keeping.
 
+## Showing the solver its own working
+
+`maxSpan` is the number that decides a castle, and until now it was invisible.
+The builder enforced it — a block that would float was simply refused — but a
+refusal teaches you where the edge is only by hitting it, one cell at a time,
+with no sense of how much reach was left before you got there.
+
+The solver already computed the answer and threw it away. `computeSupported()`
+was a wrapper over a span relaxation that knew, for every block, how far
+sideways it had reached to find the ground; it collapsed that to a boolean on
+the way out. `computeSpans()` now returns the numbers and `computeSupported()`
+derives the set from them, so there is still one solver and no chance of the
+display disagreeing with the physics.
+
+`spanHeadroom(col, row, spans)` turns that into what a builder wants to know:
+`maxSpan - used`, how many *more* cells this block could reach. `CastleView`
+draws it during the build phase as a bar along each block's base — green at 2 or
+more, amber at 1, red at 0 — so an arch shows you it is running out of reach
+before it refuses the next block. A block with no support chain returns −1 and
+draws nothing, which cannot happen in the builder but can mid-collapse.
+
+Two deliberate limits. The bar is build-phase only: during a battle it would
+read as a hitpoint meter, and there is already tinting for that. And it is
+per-block reach, not a global stress model — nothing here simulates load, only
+distance from the ground, because that is all the collapse rule uses.
+
+**Undo** is the other half of the same idea. Placing was already reversible by
+erasing, but erasing was not: erase a pillar and the eleven blocks it held
+vanished with it, refunded but gone. `BuildScene` keeps a history of what each
+action placed and what it removed, so undo re-places the removed blocks
+bottom-up — the order matters, since the solver rejects a block whose support
+has not been put back yet — and refunds or re-charges to match. Being able to
+take back a mistake cheaply is what makes experimenting with overhangs
+reasonable, and the sparkle on a 2-cell-plus cantilever is there to suggest
+that overhangs are the point.
+
 ## Current state — milestones 1 and 2
 
 Playable end to end in both directions: build a castle, then either besiege it
@@ -64,6 +100,11 @@ yourself or hold it against an AI besieger.
 - Placement is rejected if the block would float, using the same solver the
   siege uses — so you cannot build something the physics will not honour
 - Erasing a block auto-removes and refunds anything it orphaned
+- **Every block wears its span headroom** as a small bar along its base: green
+  with room to spare, amber one cell from the limit, red at it. See *Showing the
+  solver its own working* below
+- **Undo** steps back one placement or one erase, restoring orphaned blocks and
+  the gold with them
 - The throne is fixed and cannot be erased; build around it
 - Castle persists to `localStorage`
 
@@ -73,7 +114,7 @@ yourself or hold it against an AI besieger.
   uses, so the shell lands where you pointed and dragging micro-adjusts it. The
   preview rings the point it will actually reach, which is not always the point
   you chose — a wall in the way is the interesting case
-- Gold economy: shots cost 15, knights 40, sappers 70, income ticks up
+- Gold economy: shots cost 18, knights 40, sappers 70, income ticks up
 - Knights and sappers march, step over single-cell ledges, and hack at walls
   they cannot climb. Sappers hit far harder but die to their own collapses
 - Blast damage with radial falloff and per-material blast/melee resistances —

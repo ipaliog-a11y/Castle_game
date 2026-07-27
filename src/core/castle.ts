@@ -118,6 +118,24 @@ export class Castle {
    * the material's `maxSpan`.
    */
   computeSupported(): Set<number> {
+    const span = this.computeSpans();
+    const supported = new Set<number>();
+    for (let at = 0; at < span.length; at++) {
+      if (span[at] !== Infinity) supported.add(at);
+    }
+    return supported;
+  }
+
+  /**
+   * How far each occupied cell has had to reach sideways to find the ground,
+   * or `Infinity` if it never does. Indexed the same way as `cells`.
+   *
+   * The support solve has always computed this and thrown it away, keeping only
+   * "supported or not". Handing the number back is what lets the builder show
+   * how close a block is to its material's limit *before* it falls, which is
+   * the difference between learning the rule and being surprised by it.
+   */
+  computeSpans(): number[] {
     const span = new Array<number>(GRID_COLS * GRID_ROWS).fill(Infinity);
     const queue: number[] = [];
 
@@ -146,11 +164,16 @@ export class Castle {
       this.relax(col + 1, row, s + 1, span, queue);
     }
 
-    const supported = new Set<number>();
-    for (let at = 0; at < span.length; at++) {
-      if (span[at] !== Infinity) supported.add(at);
-    }
-    return supported;
+    return span;
+  }
+
+  /** Span headroom left for a cell: how many more cells it could reach. */
+  spanHeadroom(col: number, row: number, spans: number[]): number {
+    const block = this.get(col, row);
+    if (!block) return 0;
+    const used = spans[idx(col, row)];
+    if (used === Infinity) return -1;
+    return MATERIALS[block.mat].maxSpan - used;
   }
 
   private relax(

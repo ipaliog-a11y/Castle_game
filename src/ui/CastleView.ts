@@ -16,10 +16,18 @@ export class CastleView {
     const g = this.g;
     g.clear();
 
+    // In the builder, every block wears a bar showing how much cantilever it has
+    // left before its material gives out. `maxSpan` is the number that decides
+    // whether a castle stands, and it was invisible: you learned it by watching
+    // things fall. Green means room to reach further, red means this block is
+    // at its limit and the next one out will drop. Timber goes red after two
+    // cells, stone three, iron five — which is the rule, shown rather than told.
+    const spans = opts.showSupport ? this.castle.computeSpans() : null;
     const unsupported = opts.showSupport ? this.unsupportedSet() : null;
 
     for (const block of this.castle.all()) {
       this.drawBlock(g, block, unsupported?.has(block.row * GRID_COLS + block.col) ?? false);
+      if (spans) this.drawHeadroom(g, block, spans);
     }
 
     if (opts.ghost) {
@@ -42,6 +50,23 @@ export class CastleView {
       if (!supported.has(at)) out.add(at);
     }
     return out;
+  }
+
+  /** Span headroom as a bar along the block's base. */
+  private drawHeadroom(g: Phaser.GameObjects.Graphics, block: Block, spans: number[]): void {
+    const left = this.castle.spanHeadroom(block.col, block.row, spans);
+    if (left < 0) return; // already floating; the red outline says so
+
+    const x = colToX(block.col);
+    const y = rowToY(block.row);
+    const colour = left === 0 ? 0xe5654f : left === 1 ? 0xe8c15a : 0x6fce93;
+    // Width tracks how much is left, so a run of blocks reaching outward shows
+    // the bar shrinking cell by cell.
+    const frac = Math.min(1, (left + 1) / 4);
+    g.fillStyle(0x000000, 0.35);
+    g.fillRect(x + 4, y + CELL - 7, CELL - 8, 4);
+    g.fillStyle(colour, 0.95);
+    g.fillRect(x + 4, y + CELL - 7, (CELL - 8) * frac, 4);
   }
 
   private drawBlock(g: Phaser.GameObjects.Graphics, block: Block, unsupported: boolean): void {
