@@ -35,8 +35,16 @@ for (let r = 15; r >= 12; r--) blocks.push([24, r, 'stone']);
 for (let r = 15; r >= 12; r--) blocks.push([28, r, 'stone']);
 for (let c = 24; c <= 28; c++) blocks.push([c, 11, 'wood']);
 
-/** Runs a defence battle at `seed` for `steps` simulation steps, hands-off. */
-async function runBattle(seed, steps) {
+/**
+ * Runs a defence battle at `seed` up to an exact battle time, hands-off.
+ *
+ * Stepping "n times from here" is not reproducible: the scene's own loop is
+ * already running while the page settles, and how many fixed steps fit into a
+ * wall-clock window depends on the frame rate. Stepping *until a battle
+ * timestamp* is reproducible, because a fixed timestep means the state after N
+ * total steps is the same however those steps were distributed across frames.
+ */
+async function runBattle(seed, untilMs) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 640 } });
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -60,7 +68,7 @@ async function runBattle(seed, steps) {
     // to compare the sim, and a frame-paced run would take 90 real seconds.
     return new Promise((resolve) => {
       setTimeout(() => {
-        for (let i = 0; i < n && !scene.finished; i++) scene.step();
+        while (scene.elapsed < n && !scene.finished) scene.step();
         const blocks = scene.castle
           .all()
           .map((b) => `${b.col},${b.row},${b.mat},${b.hp.toFixed(4)}`)
@@ -77,24 +85,26 @@ async function runBattle(seed, steps) {
         });
       }, 400);
     });
-  }, steps);
+  }, untilMs);
 
   await page.close();
   return { state, errors };
 }
 
-const STEPS = 2400; // 40 seconds of battle at 1/60s per step
+const UNTIL_MS = 40_000; // 40 seconds of battle, whatever the frame rate does
 
 console.log('determinism');
 
-const a = await runBattle(4821, STEPS);
-const b = await runBattle(4821, STEPS);
-const c = await runBattle(9137, STEPS);
+const a = await runBattle(4821, UNTIL_MS);
+const b = await runBattle(4821, UNTIL_MS);
+const c = await runBattle(9137, UNTIL_MS);
 
 check('no errors during the runs', a.errors.length + b.errors.length + c.errors.length === 0,
   [...a.errors, ...b.errors, ...c.errors].join('; '));
 check('the URL seed is the seed the battle used', a.state.seed === 4821, `got ${a.state.seed}`);
-check('the battle actually ran', a.state.elapsed > 30000 && a.state.shotsFired > 3,
+check('both runs stopped at the same battle time', a.state.elapsed === b.state.elapsed,
+  `${a.state.elapsed} vs ${b.state.elapsed}`);
+check('the battle actually ran', a.state.elapsed >= 40000 && a.state.shotsFired > 3,
   JSON.stringify({ elapsed: a.state.elapsed, shots: a.state.shotsFired }));
 check('the AI did enough to diverge if anything were loose',
   a.state.wavesSent > 2 && a.state.blocks.length < 34,

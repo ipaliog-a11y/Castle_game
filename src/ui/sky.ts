@@ -37,12 +37,26 @@ const STAR_COUNT = 70;
  * rising at x=0 would spend the first nine seconds of the battle behind the
  * HUD — and dawn is the moment the whole idea rests on. The peak stops short of
  * the top for the same reason: at 78 the moon sat squarely on the hint text.
+ *
+ * The base sits *below* the hill line on purpose. An earlier version lifted it
+ * clear of the hilltops so a rising sun would not be "buried" in them, which
+ * got it backwards: the body then popped into existence in mid-air and started
+ * climbing. Being briefly hidden is the whole effect — the hills are drawn
+ * after the sun and moon, so each one rises out from behind them, glow first.
  */
 const ARC_LEFT = 300;
 const ARC_RIGHT_INSET = 60;
 const ARC_PEAK_Y = 155;
-/** Base of the arc, above the hilltops so a rising sun is not buried in them. */
-const ARC_BASE_LIFT = 110;
+/**
+ * How far *below* the ground line the arc starts and ends.
+ *
+ * Below, not above: the hills and ground are drawn after the sun and moon, so
+ * a body parked under the ground line is completely covered. That is what makes
+ * both ends of the journey read — it rises out from behind the hills at the
+ * start of its half and sinks back behind them at the end, rather than blinking
+ * into and out of existence in mid-air.
+ */
+const ARC_BASE_DROP = 14;
 
 export class SkyView {
   private g: Phaser.GameObjects.Graphics;
@@ -113,7 +127,7 @@ export class SkyView {
     const sun = p < 0.5;
     const u = sun ? p / 0.5 : (p - 0.5) / 0.5;
     const x = ARC_LEFT + u * (this.width - ARC_RIGHT_INSET - ARC_LEFT);
-    const base = this.groundY - ARC_BASE_LIFT;
+    const base = this.groundY + ARC_BASE_DROP;
     const y = base - Math.sin(Math.PI * u) * (base - ARC_PEAK_Y);
     const r = sun ? 34 : 27;
     const core = sun ? 0xffd98a : 0xe8eefc;

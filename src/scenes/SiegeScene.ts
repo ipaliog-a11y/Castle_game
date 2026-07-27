@@ -1,11 +1,14 @@
 import Phaser from 'phaser';
+import { solveLaunchAdaptive } from '../core/ballistics';
 import { CardEngine, OFFENSE_DECK, type CardDef } from '../core/cards';
 import {
+  BUILD_COL_MIN,
   CANNON_X,
   CANNON_Y,
   CELL,
   GROUND_Y,
   WORLD_WIDTH,
+  colToX,
   xToCol,
   yToRow,
 } from '../core/config';
@@ -26,7 +29,10 @@ import { BALL_GRAVITY, STEP_MS, BattleScene } from './BattleScene';
 
 const MIN_SHOT_SPEED = 300;
 const MAX_SHOT_SPEED = 1100;
-const MAX_DRAG = 380;
+
+/** Muzzle, where every shot and every preview starts. */
+const MUZZLE_X = CANNON_X + 22;
+const MUZZLE_Y = CANNON_Y - 10;
 
 /** Offence: the player aims the cannon, buys troops and plays offence cards. */
 export class SiegeScene extends BattleScene {
@@ -42,6 +48,7 @@ export class SiegeScene extends BattleScene {
   private cards!: CardEngine;
   private cardBar!: CardBar;
   private aiming = false;
+  /** Where the player is pointing — the shot's *target*, not a direction. */
   private aimX = 0;
   private aimY = 0;
   private flashUntil = 0;
@@ -62,6 +69,10 @@ export class SiegeScene extends BattleScene {
     this.shotMod = null;
     this.aiming = false;
     this.flashUntil = 0;
+    // Point the gun at the castle's face to begin with, so the barrel is not
+    // aimed at nothing before the first touch.
+    this.aimX = colToX(BUILD_COL_MIN);
+    this.aimY = GROUND_Y - 60;
 
     // Above the card column: the aim arc is the whole interface, and the
     // moment it disappears behind a card the shot becomes a guess.
@@ -102,13 +113,76 @@ export class SiegeScene extends BattleScene {
     this.input.on('pointerupoutside', release);
   }
 
-  private aimVector(): { vx: number; vy: number; power: number } {
-    const dx = this.aimX - CANNON_X;
-    const dy = this.aimY - CANNON_Y;
-    const dist = Math.max(1, Math.hypot(dx, dy));
-    const power = Phaser.Math.Clamp(dist / MAX_DRAG, 0.15, 1);
-    const speed = MIN_SHOT_SPEED + power * (MAX_SHOT_SPEED - MIN_SHOT_SPEED);
-    return { vx: (dx / dist) * speed, vy: (dy / dist) * speed, power };
+  /**
+   * The shot that lands where the player is pointing.
+   *
+   * You touch the target, not a direction. The old scheme fired *along* the ray
+   * from the gun through your finger, so gravity dropped the shell far below
+   * where you had pointed and you had to drag well above a target to hit it —
+   * aiming by feel for the arc rather than by looking at the thing you wanted
+   * to break. Solving for the launch instead is the same maths the attacker AI
+   * has always used, from `ballistics.ts`.
+   *
+   * The flat arc is preferred over the lob: a tapped point should be met by the
+   * most direct shot, and where a wall is in the way the preview shows the
+   * shell stopping at the wall, which is the honest answer.
+   */
+  private aimVector(): { vx: number; vy: number; power: number; short: boolean } {
+    // Never aim backwards into the staging ground behind the gun.
+    const tx = Math.max(this.aimX, MUZZLE_X + 48);
+    const ty = this.aimY;
+
+    let shot = this.solveTo(tx, ty);
+    let short = false;
+
+    if (!shot) {
+      // Out of range. Walk the aim point back along the line toward the gun
+      // until something is reachable, so pointing at the horizon means "as far
+      // that way as I can throw" rather than a dead control.
+      short = true;
+      for (let t = 0.92; t >= 0.08 && !shot; t -= 0.06) {
+        shot = this.solveTo(MUZZLE_X + (tx - MUZZLE_X) * t, MUZZLE_Y + (ty - MUZZLE_Y) * t);
+      }
+    }
+    if (!shot) {
+      // Nothing at all is reachable in that direction; keep the control alive
+      // with a flat shot forward rather than firing nothing.
+      const s = MAX_SHOT_SPEED * Math.SQRT1_2;
+      return { vx: s, vy: -s, power: 1, short: true };
+    }
+
+    const speed = Math.hypot(shot.vx, shot.vy);
+    const power = Phaser.Math.Clamp(
+      (speed - MIN_SHOT_SPEED) / (MAX_SHOT_SPEED - MIN_SHOT_SPEED),
+      0,
+      1,
+    );
+    return { vx: shot.vx, vy: shot.vy, power, short };
+  }
+
+  private solveTo(tx: number, ty: number) {
+    return (
+      solveLaunchAdaptive(
+        MUZZLE_X,
+        MUZZLE_Y,
+        tx,
+        ty,
+        MIN_SHOT_SPEED,
+        MAX_SHOT_SPEED,
+        BALL_GRAVITY,
+        false,
+      ) ??
+      solveLaunchAdaptive(
+        MUZZLE_X,
+        MUZZLE_Y,
+        tx,
+        ty,
+        MIN_SHOT_SPEED,
+        MAX_SHOT_SPEED,
+        BALL_GRAVITY,
+        true,
+      )
+    );
   }
 
   private fire(): void {
@@ -228,29 +302,48 @@ export class SiegeScene extends BattleScene {
     }
 
     if (!this.aiming) return;
-    const { vx, vy, power } = this.aimVector();
+    const { vx, vy, power, short } = this.aimVector();
+    // Amber when the shot reaches where you are pointing, red when the gun
+    // cannot throw that far and is aiming as far as it can instead.
+    const tint = short ? 0xe5654f : 0xffd08a;
 
     // Preview by running the same integration the projectile will use — at the
     // same step size, or the dotted arc quietly promises a shot that will not
     // happen.
-    let x = CANNON_X + 22;
-    let y = CANNON_Y - 10;
+    let x = MUZZLE_X;
+    let y = MUZZLE_Y;
     let sx = vx;
     let sy = vy;
+    let landedX = x;
+    let landedY = y;
     const step = STEP_MS / 1000;
-    for (let i = 0; i < 135; i++) {
+    for (let i = 0; i < 200; i++) {
       sy += BALL_GRAVITY * step;
       x += sx * step;
       y += sy * step;
+      landedX = x;
+      landedY = y;
       if (y > GROUND_Y || x > WORLD_WIDTH) break;
       if (this.castle.has(xToCol(x), yToRow(y))) break;
       if (i % 3 === 0) {
-        g.fillStyle(0xffd08a, 0.55 - i * 0.004);
+        g.fillStyle(tint, 0.6 - i * 0.0022);
         g.fillCircle(x, y, 3);
       }
     }
 
-    g.lineStyle(3, 0xffd08a, 0.35);
+    // Where it will actually land, which is not always where you pointed — a
+    // wall in the way is the interesting case, and the player should see it.
+    g.lineStyle(2, tint, 0.95);
+    g.strokeCircle(landedX, landedY, 9);
+    g.lineStyle(1, tint, 0.5);
+    g.strokeCircle(landedX, landedY, 15);
+
+    // The point under the finger, so the touch always has something on it even
+    // when the shell stops short of it.
+    g.fillStyle(0xffffff, 0.55);
+    g.fillCircle(this.aimX, this.aimY, 3);
+
+    g.lineStyle(3, tint, 0.35);
     g.strokeCircle(CANNON_X, CANNON_Y - 10, 20 + power * 16);
   }
 
@@ -322,7 +415,7 @@ export class SiegeScene extends BattleScene {
     this.cardBar = new CardBar(this, this.cards, (slot, card) => this.onCardPressed(slot, card));
 
     this.add
-      .text(WORLD_WIDTH / 2 + 80, TOP_BAR_H + 54, 'Drag anywhere to aim — release to fire.', {
+      .text(WORLD_WIDTH / 2 + 80, TOP_BAR_H + 54, 'Touch where you want to hit — release to fire.', {
         fontFamily: FONT,
         fontSize: `${FONT_SIZE.small}px`,
         color: COLORS.dim,
