@@ -50,7 +50,7 @@ for (let c = 24; c <= 28; c++) blocks.push([c, 11, 'wood']);
  * timestamp* is reproducible, because a fixed timestep means the state after N
  * total steps is the same however those steps were distributed across frames.
  */
-async function runBattle(seed, untilMs, audioOn = false) {
+async function runBattle(seed, untilMs, audioOn = false, frozen = false) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 640 } });
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -64,7 +64,7 @@ async function runBattle(seed, untilMs, audioOn = false) {
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForTimeout(900);
 
-  const state = await page.evaluate(([n, withAudio]) => {
+  const state = await page.evaluate(([n, withAudio, withHitStop]) => {
     if (withAudio) {
       window.__audio.enabled = true;
       window.__audio.setMuted(false);
@@ -76,6 +76,9 @@ async function runBattle(seed, untilMs, audioOn = false) {
     game.scene.stop('Menu');
     game.scene.start('Defend');
     const scene = game.scene.getScene('Defend');
+    // Pin the world "frozen" as far as the frame loop is concerned. Driving
+    // step() directly must be completely unaffected by it.
+    if (withHitStop) scene.hitStop = 5000;
 
     // Drive the simulation directly rather than waiting on frames: the point is
     // to compare the sim, and a frame-paced run would take 90 real seconds.
@@ -96,11 +99,12 @@ async function runBattle(seed, untilMs, audioOn = false) {
           shotsFired: scene.shotsFired,
           wavesSent: scene.wavesSent,
           audioRunning: window.__audio.running,
+          hitStop: Math.round(scene.hitStop),
           soundsPlayed: window.__audio.played,
         });
       }, 400);
     });
-  }, [untilMs, audioOn]);
+  }, [untilMs, audioOn, frozen]);
 
   await page.close();
   return { state, errors };
@@ -156,6 +160,22 @@ check('sound changes nothing: same seed with audio on is the same battle',
     same(a.state.units, loud.state.units) &&
     a.state.shotsFired === loud.state.shotsFired,
   `hp ${a.state.totalHp} silent vs ${loud.state.totalHp} loud`);
+
+// Hit stop freezes wall-clock time, never simulation steps. It is set from
+// inside a step and acted on only by `update`, so a battle driven through
+// `step` — which is how the balance harness and these tests run — must not be
+// able to tell whether it is engaged. If that ever stops being true, both the
+// seed and every number in the balance report quietly become fiction.
+const frozen = await runBattle(4821, UNTIL_MS, false, true);
+check('the frozen run really was holding a hit stop', frozen.state.hitStop > 0,
+  `hitStop ${frozen.state.hitStop}`);
+check('a hit stop changes nothing about the simulation',
+  same(a.state.blocks, frozen.state.blocks) &&
+    same(a.state.units, frozen.state.units) &&
+    same(a.state.balls, frozen.state.balls) &&
+    a.state.elapsed === frozen.state.elapsed &&
+    a.state.shotsFired === frozen.state.shotsFired,
+  `hp ${a.state.totalHp} normal vs ${frozen.state.totalHp} frozen`);
 
 check('a different seed produces a different battle',
   !same(a.state.blocks, c.state.blocks) || a.state.shotsFired !== c.state.shotsFired,

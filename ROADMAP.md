@@ -267,7 +267,18 @@ Left undone: no music, and no mute control inside a battle — the toggle is on
 the menu, builder and result screens, because the battle top bar is already
 over its touch-target budget and a phone's volume switch is faster anyway.
 
-### 6.7 Impact polish
+### 6.7 Impact polish — **mostly done**
+
+Hit stop, camera punch, an escalating word on a four-block event, and dust on
+every landing sized by the fall. Debris tumbles on the way down. See DESIGN.md
+for why the freeze is safe and where it has to live.
+
+Still open from the original list:
+
+- **Cracks at hitpoint thresholds** rather than the current smooth tint, so
+  damage reads at a glance instead of on inspection.
+
+### 6.7 Impact polish — original list
 
 Camera shake already scales with damage in `BattleScene`, and blocks tint as
 their hitpoints fall, so this is a short list rather than a system:
@@ -282,7 +293,8 @@ their hitpoints fall, so this is a short list rather than a system:
   desynchronise the seed and silently invalidate the balance harness.
 
 The stress view this section used to list is done and shipped in the builder;
-see 6.5b.
+see 6.5b. The note about where a hit stop may live turned out to be exactly
+right and is now enforced by a test.
 
 ---
 

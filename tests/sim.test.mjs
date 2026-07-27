@@ -304,6 +304,88 @@ check('the sandbox sky loops instead of ending at midnight',
   JSON.stringify(sand.skyLoops));
 await page.screenshot({ path: `${SHOT}t6-sandbox.png` });
 
+
+// --- Juice: the punch must land and then get out of the way -----------------
+//
+// Everything here is cosmetic, and cosmetic effects fail silently — a camera
+// left zoomed or a word left on screen is not an exception, it is just a game
+// that looks broken. So the assertions are mostly about *recovery*.
+const juice = await probe(() => {
+  const s = window.__game.scene.getScene('Sandbox');
+  const cam = s.cameras.main;
+
+  const small = (() => {
+    s.lastBigHit = -Infinity;
+    s.hitStop = 0;
+    s.bigHitText.setVisible(false);
+    s.bigHit(2, 600, 400); // under the threshold
+    return { hitStop: s.hitStop, shouting: s.bigHitText.visible };
+  })();
+
+  const big = (() => {
+    s.lastBigHit = -Infinity;
+    s.bigHit(9, 600, 400);
+    // The punch is a tween, so its effect on `zoom` only exists from the next
+    // frame. Asserting on the value here would be reading an animation on the
+    // line that started it; what is true *now* is that a punch is queued.
+    return { hitStop: Math.round(s.hitStop), shouting: s.bigHitText.visible,
+             word: s.bigHitText.text, punchQueued: s.tweens.getTweensOf(cam).length > 0 };
+  })();
+
+  // A chain reaction reports once, not once per link.
+  const chained = (() => {
+    s.bigHitText.setText('');
+    s.bigHit(9, 600, 400);
+    return s.bigHitText.text;
+  })();
+
+  // Escalating words, so a bigger collapse says something bigger.
+  const words = [4, 9, 20].map((n) => {
+    s.lastBigHit = -Infinity;
+    s.bigHit(n, 600, 400);
+    return s.bigHitText.text;
+  });
+
+  // Dust grows with the drop it came from.
+  const dustAt = (fall) => {
+    s.particles.length = 0;
+    s.dust(600, 500, fall, 0x8d949e);
+    const d = s.particles;
+    return { n: d.length, size: d.reduce((a, q) => a + q.size, 0) / d.length,
+             speed: d.reduce((a, q) => a + Math.abs(q.vx), 0) / d.length };
+  };
+  const near = dustAt(1);
+  const far = dustAt(10);
+  s.particles.length = 0;
+
+  return { small, big, chained, words, near, far, cappedHitStop: s.hitStop <= 200 };
+});
+
+check('a small hit does not stop the world', juice.small.hitStop === 0 && !juice.small.shouting,
+  JSON.stringify(juice.small));
+check('a big hit freezes, shouts and punches the camera',
+  juice.big.hitStop > 0 && juice.big.shouting && juice.big.punchQueued,
+  JSON.stringify(juice.big));
+check('a chain reaction announces itself once', juice.chained === '', `got "${juice.chained}"`);
+check('the word escalates with the size of the collapse',
+  new Set(juice.words).size === 3, juice.words.join(' / '));
+check('the freeze is bounded', juice.cappedHitStop);
+check('dust grows with the height it fell from',
+  juice.far.n > juice.near.n && juice.far.size > juice.near.size && juice.far.speed > juice.near.speed,
+  JSON.stringify({ near: juice.near, far: juice.far }));
+
+// The camera has to come back, and the word has to clear. Both are invisible
+// in code review and obvious the moment anyone plays it. The wait is generous
+// on purpose: the point is that they settle at all, not how fast.
+await page.waitForTimeout(2000);
+const recovered = await probe(() => {
+  const s = window.__game.scene.getScene('Sandbox');
+  return { zoom: +s.cameras.main.zoom.toFixed(3), hitStop: s.hitStop, shouting: s.bigHitText.visible };
+});
+check('the camera returns to its resting zoom', recovered.zoom === 1, JSON.stringify(recovered));
+check('the freeze lifts on its own', recovered.hitStop <= 0, JSON.stringify(recovered));
+check('the word clears itself', recovered.shouting === false, JSON.stringify(recovered));
+
 console.log('\nerrors:', errors.length ? errors : 'none');
 console.log(`${pass} passed, ${fail} failed`);
 await browser.close();
