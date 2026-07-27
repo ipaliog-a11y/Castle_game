@@ -126,8 +126,15 @@ export function iconButton(
     );
 }
 
-/** Late-afternoon light: warm, but with the sun still well clear of the hills. */
-const MENU_PROGRESS = 0.36;
+/**
+ * Dusk, matching the dark sky these screens were designed against.
+ *
+ * Not an aesthetic preference: the menu, builder and result screen all put dim
+ * grey body text straight onto the backdrop, and against a daylight sky it is
+ * close to unreadable. Unifying the sky renderer brightened these screens by
+ * accident; this puts them back.
+ */
+const MENU_PROGRESS = 0.56;
 
 /**
  * Backdrop for the scenes that are not a battle. Same renderer as the battle

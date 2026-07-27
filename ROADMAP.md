@@ -43,23 +43,22 @@ opinion beats all of them.
 **Done when** the observations are specific enough to act on — "sappers die
 before they reach anything" rather than "attack feels weak".
 
-### 6.1 Make runs reproducible
+### 6.1 Make runs reproducible — **done**
 
-`Math.random()` is called directly in the card shuffle and in the AI's aim
-spread, so no two battles are alike and none can be replayed. That blocks
-balance work outright: you cannot tell a tuning change from noise.
+Seeded dice, battle-time timers and a fixed simulation step; see DESIGN.md for
+why all three were needed rather than just the first. The seed shows on the
+result screen and is settable with `?seed=`.
 
-- `src/core/rng.ts` — a small seeded PRNG.
-- Thread it through `CardEngine` and `DefendScene`'s targeting.
-- Seed settable from a URL parameter so a specific battle can be handed to
-  someone else, or to a test.
+The plan as written here was wrong in a way worth recording: it assumed seeding
+`Math.random` was enough. It is not. The simulation integrated on frame deltas,
+so two runs of one seed diverged on frame timing alone — and that same effect
+was quietly making a test fail on an unchanged tree.
 
-**Done when** the same seed produces the same battle twice, verified by a test
-that runs a fixed seed to completion and compares the outcome.
+### 6.2 Build the balance harness — **next**
 
-### 6.2 Build the balance harness
-
-`tests/sim.test.mjs` already drives the real game headless in Chromium. The same
+`tests/sim.test.mjs` already drives the real game headless in Chromium, and
+`tests/determinism.test.mjs` shows how to drive the simulation directly rather
+than waiting on frames: 40 seconds of battle runs in a fraction of that. The same
 machinery, pointed at a batch of runs instead of assertions, is the tool this
 milestone actually needs — `tests/balance.mjs`, a report generator rather than a
 pass/fail test.

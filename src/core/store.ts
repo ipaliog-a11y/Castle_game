@@ -8,6 +8,11 @@ export type PlayerSide = 'attack' | 'defend';
 export interface SiegeResult {
   /** Who won the battle, independent of which side the human played. */
   attackerWon: boolean;
+  /**
+   * The battle's dice seed. Shown on the result screen so a battle worth
+   * arguing about can be replayed exactly, with `?seed=`.
+   */
+  seed: number;
   playerSide: PlayerSide;
   msElapsed: number;
   blocksLeft: number;
