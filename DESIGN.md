@@ -133,6 +133,60 @@ two-note fall for losing. Losing is deliberately gentle. A harsh buzzer is the
 sound a six-year-old stops playing to, and the thing this game wants next is
 another go.
 
+## What a big collapse feels like
+
+Camera shake already scaled with damage and blocks already tinted as they were
+worn down, so every hit had *some* feedback. What was missing was a difference
+in kind between a hit and a moment. Four blocks lost to one event is the
+threshold, and crossing it gets four things at once:
+
+- **A hit stop.** 55–130ms of frozen wall clock, scaled by how much came down.
+  The pause is what sells the weight; without it a tower coming down is the same
+  frames as a pebble, only more of them.
+- **A camera punch**, a brief zoom kick distinct from the shake every hit gets.
+  Shake says *that landed*; the punch says *that was big*.
+- **A word** — CRASH, SMASH or KABOOM by size. Escalating words rather than a
+  number, because the point is that a five-year-old knows something good
+  happened without reading carefully.
+- **Dust**, on every landing, sized by how far the debris fell.
+
+### Why the hit stop cannot touch the simulation
+
+This is the part that had to be got right. The fixed timestep is what makes a
+seed reproducible, and a pause in the wrong place would have quietly destroyed
+both that and the balance harness built on it.
+
+The freeze lives entirely in `update`, never in `step`. While it holds, the
+accumulator is simply not fed — so when time resumes the simulation continues on
+the exact step it was about to run. The pause costs *frames*, never *steps*.
+Battle time is counted in steps, so a hit stop does not steal any of the
+player's 90 seconds either. And the harness calls `step` directly, so it never
+sees any of this at all.
+
+`tests/determinism.test.mjs` runs one seed twice, once with the freeze pinned
+on, and requires the two battles to be identical block for block. The same test
+does this for audio, for the same reason.
+
+### Two things learned building it
+
+**Debris tumble is worth more than debris bounce.** The original idea was a
+bounce on landing, which would mean the drawn position disagreeing with the
+logical one — the block *is* where it lands, that is how rubble becomes real
+again. Spinning it on the way down costs nothing, since rotation is never read
+by anything, and does more: a row of blocks each at its own angle reads as
+wreckage where the same row upright reads as a train.
+
+**Dust is not the colour of the thing it came off.** Tinted with the material's
+own fill it disappeared — a dark brown speck against dark hills is not dust, it
+is dirt on the screen. Powdered stone and powdered timber are both far lighter
+than the block, so the fill is blended most of the way to a pale warm grey,
+keeping a trace of the original and washing out the rest.
+
+A third, found by the tests rather than by looking: the camera punch was
+originally a zoom out followed by a timed zoom back, and overlapping punches
+left it stranded — six in quick succession finished at 1.01 and stayed there.
+It is one yoyo tween now, which cannot end anywhere but where it started.
+
 ## Knock it down — the sandbox
 
 No clock, no gold, no opponent, no win condition. Your castle, a cannon, and

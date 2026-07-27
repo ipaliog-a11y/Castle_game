@@ -58,6 +58,14 @@ export interface Debris {
   maxHp: number;
   startY: number;
   hitUnits: Set<Unit>;
+  /**
+   * Tumble, in radians, and how fast it turns. Drawing only — collision and
+   * landing both use the axis-aligned `x`/`y`, and nothing in `step` reads
+   * either of these. That is what lets them come from `Math.random` without
+   * touching the seeded battle.
+   */
+  rot: number;
+  spin: number;
 }
 
 export interface Unit {
@@ -81,6 +89,19 @@ interface Particle {
   maxLife: number;
   size: number;
   color: number;
+  /** Per-particle, because dust hangs where sparks and grit fall. */
+  gravity: number;
+}
+
+/** Blends a colour toward a pale warm grey. Used for dust, which is not the
+ * colour of the thing it came off — it is a much lighter powder of it. */
+function lighten(color: number, amount: number): number {
+  const to = { r: 0xdc, g: 0xd2, b: 0xc4 };
+  const r = (color >> 16) & 0xff;
+  const g = (color >> 8) & 0xff;
+  const b = color & 0xff;
+  const mix = (from: number, target: number) => Math.round(from + (target - from) * amount);
+  return (mix(r, to.r) << 16) | (mix(g, to.g) << 8) | mix(b, to.b);
 }
 
 /** A damage number drifting up from where a hit landed. */
@@ -100,6 +121,39 @@ interface Floater {
  */
 const FLOATER_POOL = 14;
 const FLOATER_LIFE = 1.05;
+
+/**
+ * A big collapse stops the world for a moment.
+ *
+ * The pause is what sells the weight — without it a tower coming down is the
+ * same number of frames as a pebble, just more of them. It freezes *wall clock*
+ * only: the accumulator stops being fed, so the simulation resumes on exactly
+ * the step it was about to run. Battle time is counted in steps, so a hit stop
+ * costs the player no clock either.
+ *
+ * This is why the whole mechanism lives in `update` and never in `step`. A
+ * pause inside the fixed step would change how many steps a battle contains,
+ * which would desynchronise the seed and quietly invalidate the balance
+ * harness — and the harness calls `step` directly, so it never sees any of this.
+ */
+const HIT_STOP_MS = { min: 55, max: 130 };
+
+/** Blocks lost in one event before it counts as a moment rather than a hit. */
+const BIG_HIT_BLOCKS = 4;
+
+/** Battle-time gap between two announcements, so a chain reaction says it once. */
+const BIG_HIT_GAP_MS = 620;
+
+/**
+ * What gets shouted, by how much came down. Escalating words rather than a
+ * number: the point is that a five-year-old knows something good happened
+ * without reading anything carefully.
+ */
+const BIG_HIT_WORDS: Array<{ from: number; word: string; color: string }> = [
+  { from: 12, word: 'KABOOM!', color: '#ff9d5c' },
+  { from: 7, word: 'SMASH!', color: '#ffc46b' },
+  { from: BIG_HIT_BLOCKS, word: 'CRASH!', color: '#ffd08a' },
+];
 
 /**
  * Everything both battle modes share: the castle, projectiles, falling debris,
@@ -148,6 +202,15 @@ export abstract class BattleScene extends Phaser.Scene {
   protected rng!: Rng;
   /** Unspent frame time carried into the next update. */
   private accumulator = 0;
+  /**
+   * Wall-clock milliseconds the world is frozen for. Written from inside a
+   * step, but never *read* there — only `update` acts on it, which is what
+   * keeps it out of the simulation entirely.
+   */
+  private hitStop = 0;
+  /** Battle time of the last shouted word, so a chain reaction says it once. */
+  private lastBigHit = -Infinity;
+  private bigHitText!: Phaser.GameObjects.Text;
 
   /** Scales all damage dealt to the castle. Reinforce drops this below 1. */
   protected castleDamageMul = 1;
@@ -185,6 +248,8 @@ export abstract class BattleScene extends Phaser.Scene {
     this.floaters = [];
     this.timeLeft = SIEGE_DURATION_MS;
     this.elapsed = 0;
+    this.hitStop = 0;
+    this.lastBigHit = -Infinity;
     this.finished = false;
     this.castleDamageMul = 1;
     this.rallyUntil = 0;
@@ -201,6 +266,12 @@ export abstract class BattleScene extends Phaser.Scene {
     this.fx = this.add.graphics().setDepth(10);
     // Above the card bar: a shell in flight must never be hidden by the HUD.
     this.ballFx = this.add.graphics().setDepth(56);
+
+    this.bigHitText = this.add
+      .text(0, 0, '', { fontFamily: FONT, fontSize: '64px', color: '#ffd08a' })
+      .setOrigin(0.5)
+      .setDepth(58)
+      .setVisible(false);
 
     this.floaterPool = [];
     for (let i = 0; i < FLOATER_POOL; i++) {
@@ -245,13 +316,27 @@ export abstract class BattleScene extends Phaser.Scene {
   override update(_time: number, deltaMs: number): void {
     if (this.finished) return;
 
+    if (this.hitStop > 0) {
+      // Frozen. The accumulator is deliberately not fed, so when time resumes
+      // the simulation continues on the exact step it was about to run — the
+      // pause costs frames, never steps. Drawing carries on so the held frame
+      // is something you can actually look at.
+      this.hitStop = Math.max(0, this.hitStop - deltaMs);
+      this.drawWorld();
+      return;
+    }
+
     this.accumulator = Math.min(this.accumulator + deltaMs, MAX_CATCHUP_MS);
     while (this.accumulator >= STEP_MS && !this.finished) {
       this.accumulator -= STEP_MS;
       this.step();
     }
 
-    // Drawing happens once per frame regardless of how many steps ran.
+    this.drawWorld();
+  }
+
+  /** Drawing happens once per frame regardless of how many steps ran. */
+  private drawWorld(): void {
     this.sky.draw(this.progress());
     this.view.draw();
     this.drawFx();
@@ -401,6 +486,7 @@ export abstract class BattleScene extends Phaser.Scene {
     // whole battle is about, so a shell that clips it should say so even when a
     // wall beside it soaked up more of the blast.
     this.blocksBroken += destroyed.length;
+    this.bigHit(destroyed.length, x, y);
 
     const voiced = perMaterial.has('throne') ? 'throne' : loudest;
     if (voiced) {
@@ -424,6 +510,12 @@ export abstract class BattleScene extends Phaser.Scene {
     if (falling.length >= 3) {
       audio.play('collapse', { gain: Math.min(1, 0.45 + falling.length / 16) });
     }
+    // A tower going over is the bigger moment of the two, so it gets the same
+    // treatment as a blast that killed the same number outright.
+    if (falling.length >= BIG_HIT_BLOCKS) {
+      const mid = falling[Math.floor(falling.length / 2)];
+      this.bigHit(falling.length, colToX(mid.col) + CELL / 2, rowToY(mid.row));
+    }
     for (const block of falling) {
       this.castle.remove(block.col, block.row);
       this.debris.push({
@@ -435,6 +527,10 @@ export abstract class BattleScene extends Phaser.Scene {
         maxHp: block.maxHp,
         startY: rowToY(block.row),
         hitUnits: new Set(),
+        rot: 0,
+        // Heavier materials turn more lazily. It is a small thing and it is the
+        // difference between rubble and confetti.
+        spin: (Math.random() - 0.5) * 7 * (1.2 - MATERIALS[block.mat].brittleness * 0.5),
       });
     }
     if (falling.length > 0) this.reconcileBases();
@@ -445,6 +541,7 @@ export abstract class BattleScene extends Phaser.Scene {
       const d = this.debris[i];
       d.vy += DEBRIS_GRAVITY * dt;
       d.y += d.vy * dt;
+      d.rot += d.spin * dt;
 
       const col = xToCol(d.x + CELL / 2);
       const restRow = this.castle.landingRow(col, Math.max(0, yToRow(d.y)));
@@ -477,6 +574,8 @@ export abstract class BattleScene extends Phaser.Scene {
           if (hit.killed) this.blocksBroken++;
           this.reportHit(d.x + CELL / 2, restY, hit.applied, hit.killed ? 1 : 0);
         }
+
+        this.dust(d.x + CELL / 2, restY + CELL, fall / CELL, MATERIALS[d.mat].fill);
 
         if (d.hp > 0 && restRow < GRID_ROWS && !this.castle.has(col, restRow)) {
           this.castle.place(col, restRow, d.mat, d.hp / d.maxHp);
@@ -736,6 +835,85 @@ export abstract class BattleScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * One event took several blocks at once. Freeze, punch the camera, shout.
+   *
+   * Everything here is cosmetic by construction. The freeze is wall-clock only
+   * and lives in `update`; the camera and the text are Phaser objects the
+   * simulation never reads; and the throttle is measured in battle time, which
+   * is derived from the step count and therefore identical on every replay of a
+   * seed. Nothing in this method can change what the battle does.
+   */
+  protected bigHit(blocks: number, x: number, y: number): void {
+    if (blocks < BIG_HIT_BLOCKS) return;
+    if (this.elapsed - this.lastBigHit < BIG_HIT_GAP_MS) return;
+    this.lastBigHit = this.elapsed;
+
+    const scale = Phaser.Math.Clamp((blocks - BIG_HIT_BLOCKS) / 10, 0, 1);
+    this.hitStop = HIT_STOP_MS.min + (HIT_STOP_MS.max - HIT_STOP_MS.min) * scale;
+
+    // A short zoom kick, distinct from the shake that every hit already gets.
+    // Shake says "that landed"; this says "that was big".
+    //
+    // One yoyo tween rather than a zoom out followed by a timed zoom back. The
+    // two-call version left the camera stranded part-way whenever punches
+    // overlapped — six in quick succession finished at 1.01 and stayed there,
+    // which is the sort of fault that never throws and is obvious to everyone
+    // the moment they play it. A yoyo cannot end anywhere but where it started,
+    // and killing the previous one first means a chain reaction restarts the
+    // kick instead of fighting it.
+    const cam = this.cameras.main;
+    this.tweens.killTweensOf(cam);
+    cam.zoom = 1;
+    this.tweens.add({
+      targets: cam,
+      zoom: 1 + 0.012 + scale * 0.018,
+      duration: 80,
+      hold: 40,
+      yoyo: true,
+      ease: 'Quad.easeOut',
+      onComplete: () => {
+        cam.zoom = 1;
+      },
+    });
+    cam.shake(200 + scale * 160, 0.006 + scale * 0.006);
+
+    const { word, color } = BIG_HIT_WORDS.find((w) => blocks >= w.from) ?? BIG_HIT_WORDS[2];
+    this.shout(word, color, x, y, 1 + scale * 0.5);
+  }
+
+  /** The word itself: pops out, drifts up, fades. */
+  private shout(word: string, color: string, x: number, y: number, scale: number): void {
+    const text = this.bigHitText;
+    this.tweens.killTweensOf(text);
+    text
+      .setText(word)
+      .setColor(color)
+      // Kept clear of the very top and the card column, so the biggest moment
+      // in the battle is never the one thing hidden behind the HUD.
+      .setPosition(Phaser.Math.Clamp(x, 320, WORLD_WIDTH - 120), Math.max(y - 40, 150))
+      .setVisible(true)
+      .setAlpha(1)
+      .setScale(scale * 0.4)
+      .setAngle(-6);
+    this.tweens.add({
+      targets: text,
+      scale: scale,
+      angle: 3,
+      duration: 180,
+      ease: 'Back.easeOut',
+    });
+    this.tweens.add({
+      targets: text,
+      y: text.y - 54,
+      alpha: 0,
+      delay: 420,
+      duration: 420,
+      ease: 'Quad.easeIn',
+      onComplete: () => text.setVisible(false),
+    });
+  }
+
   // ------------------------------------------------------------ particles
 
   /**
@@ -757,6 +935,44 @@ export abstract class BattleScene extends Phaser.Scene {
         maxLife: life,
         size: 2 + Math.random() * 3,
         color,
+        gravity: 620,
+      });
+    }
+  }
+
+  /**
+   * Dust where something landed, sized by how far it fell.
+   *
+   * Deliberately not a `burst`: dust spreads sideways along the ground rather
+   * than spraying, hangs far longer, and barely falls. That difference is what
+   * makes a landing read as a landing rather than as another small explosion.
+   *
+   * The colour is the material's, lifted most of the way to a pale warm grey.
+   * Tinted with the raw fill it vanished — a dark brown speck against dark
+   * hills is not dust, it is dirt on the screen. Powdered stone and powdered
+   * timber are both much lighter than the block they came off, so keeping a
+   * trace of the original and washing out the rest is both truer and legible.
+   */
+  protected dust(x: number, y: number, fallCells: number, color: number): void {
+    const tint = lighten(color, 0.62);
+    const weight = Phaser.Math.Clamp(fallCells / 6, 0.18, 1);
+    // Sized generously: at phone scale one world pixel is about two thirds of a
+    // CSS pixel, so a puff that reads fine on a monitor is a scattering of
+    // specks in the hand.
+    const count = Math.round(4 + weight * 14);
+    for (let i = 0; i < count; i++) {
+      const dir = Math.random() < 0.5 ? -1 : 1;
+      const life = 0.5 + Math.random() * 0.7 * weight;
+      this.particles.push({
+        x: x + (Math.random() - 0.5) * CELL * 0.8,
+        y: y - Math.random() * 6,
+        vx: dir * (20 + Math.random() * 90 * weight),
+        vy: -(10 + Math.random() * 40 * weight),
+        life,
+        maxLife: life,
+        size: 3 + Math.random() * 7 * weight,
+        color: tint,
+        gravity: 90,
       });
     }
   }
@@ -769,7 +985,7 @@ export abstract class BattleScene extends Phaser.Scene {
         this.particles.splice(i, 1);
         continue;
       }
-      p.vy += 620 * dt;
+      p.vy += p.gravity * dt;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
     }
@@ -799,10 +1015,15 @@ export abstract class BattleScene extends Phaser.Scene {
 
     for (const d of this.debris) {
       const def = MATERIALS[d.mat];
+      const half = (CELL - 4) / 2;
+      g.save();
+      g.translateCanvas(d.x + CELL / 2, d.y + CELL / 2);
+      g.rotateCanvas(d.rot);
       g.fillStyle(def.fill, 1);
-      g.fillRect(d.x + 2, d.y + 2, CELL - 4, CELL - 4);
+      g.fillRect(-half, -half, half * 2, half * 2);
       g.lineStyle(1, def.stroke, 1);
-      g.strokeRect(d.x + 2, d.y + 2, CELL - 4, CELL - 4);
+      g.strokeRect(-half, -half, half * 2, half * 2);
+      g.restore();
     }
 
     for (const u of this.units) {
