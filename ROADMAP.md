@@ -54,7 +54,7 @@ The plan as written here was wrong in a way worth recording: it assumed seeding
 so two runs of one seed diverged on frame timing alone — and that same effect
 was quietly making a test fail on an unchanged tree.
 
-### 6.2 Build the balance harness — **done**
+### 6.2 Build the balance harness — **done**, with one correction
 
 `tests/sim.test.mjs` already drives the real game headless in Chromium, and
 `tests/determinism.test.mjs` shows how to drive the simulation directly rather
@@ -79,10 +79,18 @@ The control earns its place: it proves the table discriminates rather than
 being saturated. Everything dies, but the bare throne dies in 4 seconds and a
 thin curtain takes 33, so the differences between rows are real.
 
-One correctness note, because it nearly poisoned the first report: the load
-guard originally read "is the throne present" *after* the battle, which made it
-fire on every row the attacker won — that is, all of them. It snapshots before
-the loop now.
+Two correctness notes, both of which poisoned a report before being caught.
+
+The load guard originally read "is the throne present" *after* the battle, which
+made it fire on every row the attacker won — that is, all of them. It snapshots
+before the loop now.
+
+And the harness kept its own copy of the material prices, which drifted: iron
+was still listed at 45 long after it was cut to 32, so the iron archetype was
+built to a budget the game does not charge and under-spent by a third while
+printing as if it had not. It reads `materials.ts` now. A report whose whole job
+is to catch balance drift must not have any of its own — see 6.3 for the two
+conclusions this cost.
 
 ### 6.3 Settle the numbers — **first pass done, one problem left**
 
@@ -144,22 +152,56 @@ Changed: stone 110→150 hp, timber 40→55, iron 45→32g and 260→300 hp, thr
 200→380 hp, income 13→10/s, shot 15→18g, player shot 62→42 damage, AI 62→42 and
 110→75, AI reload tightened.
 
-The archetypes now differentiate instead of all reading 100%, and spreading the
-bases keeps one more of them than clustering. But **the split is between spread
-and compact, not between good and bad**, and that is the problem left:
+**Two conclusions drawn from this table were wrong, and the harness was why.**
+Kept here because the mistake is the useful part: every archetype was a fixed
+pattern at a different place on the field, so material, shape, depth and spend
+all moved at once and any of them could be credited with the result. The iron
+shell was the worst case — 19 blocks at columns 33–37, only two of them in front
+of the throne, and priced from a stale copy of the cost table that still said
+45g. It was a 608 gold castle printing as 855 and losing to depth, not to iron.
 
-- Spread castles (thin curtain, arch fort, both base rows) hold against the dumb
-  bot every time.
-- Compact ones (thick keep, iron shell, timber sprawl) fall every time.
+#### With frontage and budget held constant
 
-Horizontal depth in front of the throne is still the only thing that really
-counts. Bases give the rear a purpose, but they do not change what wins.
+Same twelve columns for every archetype, all in front of the throne, each filled
+bottom-up until the 900 runs out. Prices now read from `materials.ts` rather
+than a copy. A row of this table finally isolates the thing it is named after.
 
-Two honest caveats on the table above. The defence column plays **no cards**, so
-it is a floor. And my archetypes conflate *compact* with *shallow* — the "thick
-keep" spans columns 31–38, which is only four columns in front of the throne, so
-it is testing depth as much as it is testing thickness. A fair comparison would
-hold depth constant, and that is the next thing to fix in the harness.
+```
+  archetype       spend  blocks | AI attacks: win  survived  standing  bases | bot attacks: win   time
+  bare throne        0       0 |            100%  29.8s        0%      - |             100%   10.4s
+  stone wall       900      60 |             75%  85.5s        2%      - |               0%      -s
+  iron wall        896      28 |             50%    87s       31%      - |               0%      -s
+  timber wall      900     180 |            100%  50.6s        0%      - |             100%   38.8s
+  stone screens    900      60 |            100%  78.5s        0%      - |               0%      -s
+  arch fort        855      57 |             25%  86.2s        2%      - |               0%      -s
+  bases stacked    900      63 |             75%  85.7s        5%    0/3 |               0%      -s
+  bases spread     900      63 |              0%     -s        5%    1/3 |               0%      -s
+```
+
+The first three rows are one footprint and one budget, differing only in
+material. The next two are both stone on that same footprint, differing only in
+arrangement. What that shows:
+
+1. **Iron is the best material, not the second worst.** 50% against stone's 75%
+   and timber's 100%, and it finishes with 31% of itself still standing where
+   stone finishes with 2%. The earlier finding was an artifact of testing iron
+   at a third of the frontage on a third less gold.
+2. **Mass beats gaps.** Solid stone loses 75% of the time; the same gold as tall
+   gapped screens loses every time. The old "spread beats mass" was comparing
+   spread-and-deep against massed-and-shallow.
+3. **Arches are the best structure found so far** — 25%, on 855 gold, and the
+   only row that beats iron. Piers and lintels put material where the support
+   solver rewards it instead of where mass feels reassuring.
+4. **Spreading the bases still wins**, now within the three legal rear columns:
+   stacked loses all three and the throne 75% of the time; spread along the
+   ground keeps one and holds every time.
+
+Still open: **the scripted attacker now loses to everything except timber.** It
+plays no cards, never concentrates fire and only shoots the lowest block, so
+read it as a floor rather than as "offence is too weak" — but the floor has gone
+from "wins in 17–33s against everything" to "only beats the worst castle in the
+table", and that is a big enough swing to want a played opinion before tuning
+anything else.
 
 ### 6.4 Phone legibility and touch targets — **done**
 

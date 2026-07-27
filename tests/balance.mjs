@@ -22,11 +22,22 @@
  *   SEEDS=12 node tests/balance.mjs   # tighter numbers, slower
  */
 import { chromium } from 'playwright';
+import { MATERIALS } from '../src/core/materials.ts';
 
 const BASE = process.env.GAME_URL || 'http://localhost:5173/';
 const SEED_COUNT = Number(process.env.SEEDS || 4);
 const BUDGET = 900;
-const COST = { wood: 5, stone: 15, iron: 45, throne: 0, masonsYard: 0, oilVat: 0, bastion: 0 };
+/**
+ * Prices come from the game rather than a copy of them.
+ *
+ * They used to be written out here, and they drifted: iron was still listed at
+ * 45 after it was cut to 32, so every iron archetype was built to a budget the
+ * game does not charge and under-spent by a third. A report whose whole job is
+ * to catch balance drift must not have its own.
+ */
+const COST = Object.fromEntries(
+  Object.values(MATERIALS).map((m) => [m.id, m.cost]),
+);
 
 // Build zone is columns 20..38; the throne is fixed at (35, 15).
 const THRONE = [35, 15, 'throne'];
@@ -48,58 +59,81 @@ function build(fn) {
 
 const spend = (blocks) => blocks.reduce((sum, b) => sum + COST[b[2]], 0);
 
+/**
+ * Every archetype fights on the same ground.
+ *
+ * The previous set varied *where* it built as much as *what*: the "thick keep"
+ * sat at columns 31-38, only four of them in front of the throne, so it was
+ * measuring depth while claiming to measure thickness. Holding the frontage
+ * fixed means a row of this table finally answers the question it is named
+ * after — same twelve columns for everyone, same budget, and only the material
+ * or the arrangement changes.
+ */
+const FRONT_MIN = 23;
+const FRONT_MAX = 34;
+const FRONTAGE = Array.from({ length: FRONT_MAX - FRONT_MIN + 1 }, (_, i) => FRONT_MIN + i);
+
+/**
+ * Fills the frontage bottom-up until the gold runs out.
+ *
+ * Budget-driven rather than shape-driven, which is the other half of the fix.
+ * The old archetypes were fixed patterns, so what they cost was whatever they
+ * happened to cost — the iron shell was a 608g castle being compared against
+ * 900g ones, and nobody noticed because a stale price in this file made it
+ * print as 855. Letting the budget decide how far up the wall goes is what
+ * makes "same money, different material" a real comparison.
+ */
+function fillFrontage(put, mat, cols = FRONTAGE) {
+  for (let r = 15; r >= 0; r--) for (const c of cols) put(c, r, mat);
+}
+
 const ARCHETYPES = {
   // Control. No castle at all — just the throne standing in the open. If this
   // does not die far faster than everything else, the table is saturated and
   // the numbers below it mean nothing.
   'bare throne (control)': build(() => {}),
 
-  // Several thin stone screens. Cheap frontage, nothing load-bearing behind it.
-  'thin curtain': build((put) => {
-    for (const col of [22, 25, 28, 31, 34]) for (let r = 15; r >= 4; r--) put(col, r, 'stone');
-    for (const [c, r] of [[34, 15], [36, 15], [35, 14]]) put(c, r, 'stone');
-  }),
+  // --- same footprint, same money, three materials -------------------------
+  // This trio is the point of the whole report. Any difference between these
+  // three rows is the material and nothing else.
+  'stone wall': build((put) => fillFrontage(put, 'stone')),
+  'iron wall': build((put) => fillFrontage(put, 'iron')),
+  'timber wall': build((put) => fillFrontage(put, 'wood')),
 
-  // One solid mass of stone with the throne buried in the middle of it.
-  'thick keep': build((put) => {
-    for (let r = 15; r >= 9; r--) for (let c = 31; c <= 38; c++) put(c, r, 'stone');
-  }),
+  // --- same footprint, same money, two arrangements ------------------------
+  // Stone in both, so any difference here is the shape.
 
-  // The hypothesis under test: 20 iron blocks is the whole budget.
-  'iron shell': build((put) => {
-    for (let r = 15; r >= 13; r--) for (let c = 33; c <= 37; c++) put(c, r, 'iron');
-    for (let c = 33; c <= 37; c++) put(c, 12, 'iron');
-  }),
+  // Tall thin screens with gaps between them, spanning the same frontage.
+  'stone screens': build((put) =>
+    fillFrontage(put, 'stone', FRONTAGE.filter((c) => (c - FRONT_MIN) % 3 === 0)),
+  ),
 
-  // The other extreme: 180 blocks of timber, wide and deep and weak.
-  'timber sprawl': build((put) => {
-    for (let r = 15; r >= 6; r--) for (let c = 20; c <= 38; c++) put(c, r, 'wood');
-  }),
-
-  // Pillars and lintels, leaning on maxSpan rather than on mass.
+  // Piers and lintels, leaning on maxSpan rather than on mass.
   'arch fort': build((put) => {
-    for (const col of [22, 26, 30, 34, 38]) for (let r = 15; r >= 6; r--) put(col, r, 'stone');
-    for (const row of [6, 10, 14]) for (let c = 20; c <= 38; c++) put(c, row, 'stone');
+    const piers = FRONTAGE.filter((c) => (c - FRONT_MIN) % 4 === 0);
+    for (let r = 15; r >= 6; r--) for (const c of piers) put(c, r, 'stone');
+    for (const row of [6, 10, 14]) for (const c of FRONTAGE) put(c, row, 'stone');
   }),
 
-  // The two rows that measure the support-base decision. Same wall, same gold,
-  // same three bases — only where they sit differs. Clustered they are deep but
-  // one breach reaches all three; spread they are shallower but a breach costs
-  // one card, not the hand.
-  'bases clustered': build((put) => {
+  // --- where the support bases go ------------------------------------------
+  // Bases are legal only behind the throne now, which leaves three columns, so
+  // the real choice is no longer near-or-far but stacked-or-spread. Stacked,
+  // one wide blast reaches all three; spread along the ground, it cannot.
+  'bases stacked': build((put) => {
     put(37, 15, 'masonsYard');
-    put(38, 15, 'oilVat');
-    put(37, 14, 'bastion');
-    for (const col of [24, 27, 30, 33]) for (let r = 15; r >= 5; r--) put(col, r, 'stone');
+    put(37, 14, 'oilVat');
+    put(37, 13, 'bastion');
+    fillFrontage(put, 'stone', FRONTAGE.filter((c) => (c - FRONT_MIN) % 3 === 0));
   }),
 
   'bases spread': build((put) => {
-    put(21, 15, 'masonsYard');
-    put(29, 15, 'oilVat');
+    put(36, 15, 'masonsYard');
+    put(37, 15, 'oilVat');
     put(38, 15, 'bastion');
-    for (const col of [24, 27, 30, 33]) for (let r = 15; r >= 5; r--) put(col, r, 'stone');
+    fillFrontage(put, 'stone', FRONTAGE.filter((c) => (c - FRONT_MIN) % 3 === 0));
   }),
 };
+
 
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
 const page = await browser.newPage({ viewport: { width: 1280, height: 640 } });

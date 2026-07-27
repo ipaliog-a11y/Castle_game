@@ -5,6 +5,7 @@ import { CARDS, DEFENSE_DECK, OFFENSE_DECK } from '../src/core/cards.ts';
 import { BASE_MATERIALS, BUILDABLE, MATERIALS } from '../src/core/materials.ts';
 import { UNITS } from '../src/core/units.ts';
 import { hasGlyph } from '../src/ui/icons.ts';
+import { DAMAGE_STAGES, cellHash, damageStage } from '../src/ui/damage.ts';
 
 let pass = 0;
 let fail = 0;
@@ -310,6 +311,43 @@ function simulate(x0, y0, vx, vy, tx, ty, steps = 4000, dt = 1 / 240) {
     if (spans[(GRID_ROWS - 1) * GRID_COLS + col] !== 0) allGrounded = false;
   }
   check('a base on the ground row stands unaided anywhere in the zone', allGrounded);
+}
+
+
+// 22. Damage has to read at a glance, which means discrete stages rather than a
+// continuous tint, and crack patterns that do not move.
+{
+  check('a fresh block is pristine', damageStage(1) === 0);
+  check('a dead block is at the last stage',
+    damageStage(0) === DAMAGE_STAGES.length, `${damageStage(0)}`);
+  check('every stage is reachable',
+    new Set([1, 0.6, 0.35, 0.1].map(damageStage)).size === DAMAGE_STAGES.length + 1);
+
+  // Monotonic: healing a block must never make it look worse.
+  let monotonic = true;
+  let previous = 0;
+  for (let hp = 100; hp >= 0; hp--) {
+    const stage = damageStage(hp / 100);
+    if (stage < previous) monotonic = false;
+    previous = stage;
+  }
+  check('wear only ever increases as health falls', monotonic);
+
+  // The shimmer guard. Cracks are drawn from this hash sixty times a second, so
+  // an unstable value would make every damaged block crawl with static — which
+  // no screenshot would ever show and nobody could stand to look at.
+  check('a cell always hashes the same way',
+    cellHash(12, 7) === cellHash(12, 7) && cellHash(0, 0) === cellHash(0, 0));
+  check('neighbouring cells do not share a pattern',
+    cellHash(12, 7) !== cellHash(13, 7) && cellHash(12, 7) !== cellHash(12, 8));
+
+  // Distinctness across a whole castle-sized grid, so walls do not look cloned.
+  const seen = new Set();
+  for (let col = 0; col < GRID_COLS; col++) {
+    for (let row = 0; row < GRID_ROWS; row++) seen.add(cellHash(col, row) & 0xffff);
+  }
+  check('patterns stay varied across a full grid',
+    seen.size > GRID_COLS * GRID_ROWS * 0.9, `${seen.size} of ${GRID_COLS * GRID_ROWS}`);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
