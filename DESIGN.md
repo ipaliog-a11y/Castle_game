@@ -133,6 +133,30 @@ two-note fall for losing. Losing is deliberately gentle. A harsh buzzer is the
 sound a six-year-old stops playing to, and the thing this game wants next is
 another go.
 
+## Reading a block's condition
+
+Damage is drawn as four discrete stages, not a continuous tint, and the
+information lives in cracks rather than in colour.
+
+Both halves of that were wrong before. The tint interpolated all the way down
+toward near-black, which meant a nearly-dead iron block, stone block and timber
+block all converged on the same dark smudge — you could no longer tell what you
+were shooting at, which is precisely when knowing matters. Darkening now stops
+at 62%, so a material stays recognisable at any health.
+
+And a smooth ramp is unreadable anyway: 90% and 70% look identical, so wear
+could only be judged by staring, and it never answered the question actually
+being asked — *will one more hit do it?* Four stages make every transition a
+visible event, and the last one breaks a corner off, which reads from across the
+field.
+
+Crack patterns come from a hash of the cell's coordinates rather than from a
+random draw. `draw` runs sixty times a second, so cracks re-rolled each frame
+would crawl like static — a fault invisible in a screenshot and unbearable in
+motion. Hashing the coordinates gives every block a permanent pattern for free,
+with no state to store and nothing taken from the battle's dice. The pure
+helpers live in `src/ui/damage.ts` so they can be tested without a browser.
+
 ## What a big collapse feels like
 
 Camera shake already scaled with damage and blocks already tinted as they were

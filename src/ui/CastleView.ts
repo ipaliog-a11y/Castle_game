@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import type { Block, Castle } from '../core/castle';
 import { CELL, GRID_COLS, colToX, rowToY } from '../core/config';
 import { MATERIALS, type MaterialId } from '../core/materials';
+import { DAMAGE_STAGES, cellHash, damageStage } from './damage';
 import { BASE_GLYPH, drawGlyph } from './icons';
 
 /** Renders the castle grid. Both the builder and the siege use this. */
@@ -75,12 +76,22 @@ export class CastleView {
     const y = rowToY(block.row);
     const health = Phaser.Math.Clamp(block.hp / block.maxHp, 0, 1);
 
-    // Damaged blocks darken toward near-black so wear reads without extra art.
+    const stage = damageStage(health);
+
+    // Wear darkens the block, but only so far.
+    //
+    // This used to run down to 30% of the material's colour, which meant a
+    // nearly-dead iron block, stone block and timber block all converged on the
+    // same dark smudge — you could no longer tell what you were shooting at,
+    // which is exactly when knowing matters. The floor is 62% now, so a
+    // material stays recognisable at any health, and the *damage* is carried by
+    // the cracks below instead of by the colour.
+    const shade = 100 - stage * 13;
     const fill = Phaser.Display.Color.Interpolate.ColorWithColor(
       Phaser.Display.Color.ValueToColor(0x1a1410),
       Phaser.Display.Color.ValueToColor(def.fill),
       100,
-      Math.round(30 + health * 70),
+      shade,
     );
     const tint = Phaser.Display.Color.GetColor(fill.r, fill.g, fill.b);
 
@@ -110,23 +121,74 @@ export class CastleView {
       g.fillRect(x + CELL - 15, y + 4, 3, 8);
     }
 
-    if (health < 0.75) {
-      g.lineStyle(1, 0x000000, 0.5);
-      g.beginPath();
-      g.moveTo(x + 6, y + CELL - 4);
-      g.lineTo(x + 13, y + CELL * 0.5);
-      g.lineTo(x + 9, y + 6);
-      if (health < 0.4) {
-        g.moveTo(x + CELL - 5, y + 5);
-        g.lineTo(x + CELL - 14, y + CELL * 0.55);
-        g.lineTo(x + CELL - 8, y + CELL - 5);
-      }
-      g.strokePath();
-    }
+    this.drawCracks(g, block, stage);
 
     if (unsupported) {
       g.fillStyle(0xe5654f, 0.18);
       g.fillRect(x, y, CELL, CELL);
+    }
+  }
+
+  /**
+   * One crack per damage stage, spreading inward from the edges.
+   *
+   * Drawn twice — a dark line with a pale one offset a pixel below it — because
+   * a single dark stroke on a dark block is invisible at phone scale, and the
+   * highlight is what makes a crack read as a split rather than a scratch. The
+   * last stage adds a broken-off corner, which is the one shape that says
+   * "about to go" at a glance rather than on inspection.
+   */
+  private drawCracks(g: Phaser.GameObjects.Graphics, block: Block, stage: number): void {
+    if (stage === 0) return;
+    const x = colToX(block.col);
+    const y = rowToY(block.row);
+    const h = cellHash(block.col, block.row);
+    const mid = CELL / 2;
+
+    for (let i = 0; i < stage; i++) {
+      const bits = (h >>> (i * 7)) & 0x7f;
+      // Each crack starts on its own edge, so two never sit on top of each other.
+      const edge = (i + (h & 3)) % 4;
+      const along = 6 + (bits & 7) * 2.5;
+      const kink = ((bits >> 3) & 7) - 3.5;
+
+      const start =
+        edge === 0 ? [along, 0]
+        : edge === 1 ? [CELL, along]
+        : edge === 2 ? [CELL - along, CELL]
+        : [0, CELL - along];
+      const end = [mid + kink * 1.6, mid - kink];
+      const bend = [(start[0] + end[0]) / 2 + kink, (start[1] + end[1]) / 2 - kink * 1.2];
+
+      const path = (dx: number, dy: number) => {
+        g.beginPath();
+        g.moveTo(x + start[0] + dx, y + start[1] + dy);
+        g.lineTo(x + bend[0] + dx, y + bend[1] + dy);
+        g.lineTo(x + end[0] + dx, y + end[1] + dy);
+        g.strokePath();
+      };
+
+      g.lineStyle(2, 0x140f0c, 0.62);
+      path(0, 0);
+      g.lineStyle(1, 0xffffff, 0.14);
+      path(0.5, 1.5);
+    }
+
+    // Crumbling: a corner has gone. Reads instantly, and from across the field.
+    if (stage >= DAMAGE_STAGES.length) {
+      const corner = h & 3;
+      const cx = corner === 0 || corner === 3 ? x : x + CELL;
+      const cy = corner < 2 ? y : y + CELL;
+      const sx = cx === x ? 1 : -1;
+      const sy = cy === y ? 1 : -1;
+      const bite = 9 + (h & 3);
+      g.fillStyle(0x0d0a08, 0.55);
+      g.beginPath();
+      g.moveTo(cx, cy);
+      g.lineTo(cx + sx * bite, cy);
+      g.lineTo(cx, cy + sy * bite);
+      g.closePath();
+      g.fillPath();
     }
   }
 
