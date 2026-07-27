@@ -68,7 +68,11 @@ yourself or hold it against an AI besieger.
 - Castle persists to `localStorage`
 
 **Offence (laying siege) — milestone 1**
-- Drag-to-aim cannon with a live trajectory preview and power ring
+- **Touch where you want to hit.** The finger is the shot's *target*, not a
+  direction: the launch is solved with the same `ballistics.ts` the attacker AI
+  uses, so the shell lands where you pointed and dragging micro-adjusts it. The
+  preview rings the point it will actually reach, which is not always the point
+  you chose — a wall in the way is the interesting case
 - Gold economy: shots cost 15, knights 40, sappers 70, income ticks up
 - Knights and sappers march, step over single-cell ledges, and hack at walls
   they cannot climb. Sappers hit far harder but die to their own collapses
@@ -120,6 +124,9 @@ reason: higher, and the moon sat on the hint text.
   and a dozen numbers racing each other tells you less than a total
 - Shells and the aim arc draw *above* the HUD. Losing sight of a shot mid-flight
   turns aiming into guesswork, so nothing is allowed to cover one
+- Pointing past the gun's reach does not kill the control: the aim point walks
+  back along the line until something is reachable, and the arc turns red to
+  say so
 
 **Cards implemented**
 
