@@ -91,12 +91,15 @@ yourself or hold it against an AI besieger.
 The game should make sense to a six-year-old, which rules out anything whose
 meaning lives only in a word or a number.
 
-- Every card leads with a **drawn symbol** — three linked shot, a powder keg, a
-  banner, a shield, a cauldron — with its cost directly beneath, so the left
-  edge of a card answers "what is it, and can I afford it" without a name being
-  read. They are vector, not art files: nothing to license, nothing to ship, and
-  sharp at any zoom. A core test asserts every dealt card has one, so a new card
-  cannot quietly fall back to a plain disc.
+- Everything the player picks from leads with a **drawn symbol**: cards (linked
+  shot, a powder keg, a banner, a shield, a cauldron), build materials (planks,
+  a staggered brick bond, a riveted plate), the erase tool, and the two troop
+  types (a plumed helm, a pickaxe). Cards put the cost directly beneath, so the
+  left edge answers "what is it, and can I afford it" without a name being read.
+  They are vector, not art files: nothing to license, nothing to ship, and sharp
+  at any zoom. A core test asserts every card, material and troop has one — and
+  that the check itself can still fail — so nothing quietly falls back to a
+  plain disc.
 - The battle runs **dawn to midnight**. The sun rises as the fight is declared,
   crosses, and sets exactly at the halfway mark; the moon carries the second
   half. The sky is therefore the clock: a player who cannot yet read `1:29` can

@@ -21,7 +21,7 @@ import {
 } from '../core/units';
 import { CardBar } from '../ui/CardBar';
 import { BUTTON, FONT_SIZE, TOP_BAR_H } from '../ui/layout';
-import { COLORS, FONT, hudButton, panel } from '../ui/theme';
+import { COLORS, FONT, hudButton, iconButton, panel } from '../ui/theme';
 import { BALL_GRAVITY, BattleScene } from './BattleScene';
 
 const MIN_SHOT_SPEED = 300;
@@ -293,11 +293,27 @@ export class SiegeScene extends BattleScene {
       .setOrigin(0.5)
       .setDepth(41);
 
-    hudButton(this, 720, midY, BUTTON.w, BUTTON.h, `Knight ${UNITS.knight.gold}g`, () =>
-      this.deploy('knight'),
+    iconButton(
+      this,
+      720,
+      midY,
+      BUTTON.w,
+      BUTTON.h,
+      'knight',
+      UNITS.knight.fill,
+      `${UNITS.knight.name} ${UNITS.knight.gold}g`,
+      () => this.deploy('knight'),
     );
-    hudButton(this, 926, midY, BUTTON.w, BUTTON.h, `Sapper ${UNITS.sapper.gold}g`, () =>
-      this.deploy('sapper'),
+    iconButton(
+      this,
+      926,
+      midY,
+      BUTTON.w,
+      BUTTON.h,
+      'sapper',
+      UNITS.sapper.fill,
+      `${UNITS.sapper.name} ${UNITS.sapper.gold}g`,
+      () => this.deploy('sapper'),
     );
     hudButton(this, 1160, midY, 180, BUTTON.h, 'Give up', () => this.finishBattle(false));
 

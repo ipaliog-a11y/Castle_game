@@ -1,8 +1,8 @@
 import type Phaser from 'phaser';
 
 /**
- * A drawn symbol for every card, so a player who cannot read the name can still
- * tell the cards apart and remember what each one did.
+ * A drawn symbol for every card, material and troop type, so a player who cannot
+ * read the name can still tell them apart and remember what each one did.
  *
  * These are vector, not images: no asset files to license or ship, they stay
  * sharp at any zoom, and they match how the rest of the game is drawn. Each is
@@ -24,7 +24,7 @@ type Ctx = {
   alpha: number;
 };
 
-export function drawCardIcon(
+export function drawGlyph(
   g: Phaser.GameObjects.Graphics,
   id: string,
   cx: number,
@@ -42,7 +42,7 @@ export function drawCardIcon(
     accent,
     alpha,
   };
-  (ICONS[id] ?? unknown)(ctx);
+  (GLYPHS[id] ?? unknown)(ctx);
 }
 
 const IRON = 0xb9c4d6;
@@ -57,7 +57,7 @@ const DARK = 0x1b2130;
 const WOOD = 0x8a5a30;
 const FLAME = 0xffcb6b;
 
-const ICONS: Record<string, (c: Ctx) => void> = {
+const GLYPHS: Record<string, (c: Ctx) => void> = {
   /** Three shot linked by chain. */
   chainShot({ g, px, py, s, alpha }) {
     g.lineStyle(s(7), 0x7d879b, alpha);
@@ -176,6 +176,118 @@ const ICONS: Record<string, (c: Ctx) => void> = {
     g.fillCircle(px(2), py(26), s(3));
   },
 
+  // ------------------------------------------------------ build materials
+
+  /** Stacked planks. */
+  wood({ g, px, py, s, accent, alpha }) {
+    for (const y of [-34, -8, 18]) {
+      g.fillStyle(accent, alpha);
+      g.fillRoundedRect(px(-42), py(y), s(84), s(22), s(3));
+      g.lineStyle(s(2), 0x5d3a20, alpha * 0.8);
+      g.beginPath();
+      g.moveTo(px(-34), py(y + 11));
+      g.lineTo(px(34), py(y + 11));
+      g.strokePath();
+    }
+  },
+
+  /** Bricks in a staggered bond — the give-away that it is masonry. */
+  stone({ g, px, py, s, accent, alpha }) {
+    const brick = (x: number, y: number, w: number) => {
+      g.fillStyle(accent, alpha);
+      g.fillRect(px(x), py(y), s(w), s(22));
+      g.lineStyle(s(2), 0x5c626b, alpha * 0.8);
+      g.strokeRect(px(x), py(y), s(w), s(22));
+    };
+    brick(-42, -34, 40);
+    brick(2, -34, 40);
+    brick(-42, -8, 18);
+    brick(-20, -8, 40);
+    brick(24, -8, 18);
+    brick(-42, 18, 40);
+    brick(2, 18, 40);
+  },
+
+  /** A riveted plate. */
+  iron({ g, px, py, s, accent, alpha }) {
+    g.fillStyle(accent, alpha);
+    g.fillRoundedRect(px(-42), py(-32), s(84), s(64), s(6));
+    g.fillStyle(0xe7ecf5, alpha * 0.25);
+    g.fillRect(px(-42), py(-32), s(84), s(9));
+    g.fillStyle(0xdfe6f2, alpha * 0.9);
+    for (const [x, y] of [
+      [-30, -20],
+      [30, -20],
+      [-30, 20],
+      [30, 20],
+    ]) {
+      g.fillCircle(px(x), py(y), s(6));
+    }
+  },
+
+  /** A block being struck out. */
+  erase({ g, px, py, s, accent, alpha }) {
+    g.fillStyle(0x5b626d, alpha * 0.7);
+    g.fillRect(px(-34), py(-34), s(68), s(68));
+    g.lineStyle(s(12), accent, alpha);
+    g.beginPath();
+    g.moveTo(px(-30), py(-30));
+    g.lineTo(px(30), py(30));
+    g.moveTo(px(30), py(-30));
+    g.lineTo(px(-30), py(30));
+    g.strokePath();
+  },
+
+  // ---------------------------------------------------------------- troops
+
+  /**
+   * A great helm. Not a shield — Reinforce already owns that silhouette — and
+   * squarer than a first attempt that came out a featureless lozenge.
+   */
+  knight({ g, px, py, s, accent, alpha }) {
+    // Plume first, so the helm overlaps its base.
+    g.fillStyle(0xd6483a, alpha);
+    g.fillRoundedRect(px(-8), py(-52), s(16), s(24), s(7));
+
+    g.fillStyle(accent, alpha);
+    g.fillRoundedRect(px(-28), py(-36), s(56), s(38), s(14));
+    g.fillRect(px(-28), py(-14), s(56), s(44));
+    g.fillStyle(accent, alpha);
+    g.fillRoundedRect(px(-28), py(18), s(56), s(16), s(6));
+
+    // Visor slit and nose bar: the two marks that say "helm" and not "bucket".
+    g.fillStyle(DARK, alpha);
+    g.fillRect(px(-23), py(-12), s(46), s(11));
+    g.fillRect(px(-16), py(10), s(9), s(9));
+    g.fillRect(px(7), py(10), s(9), s(9));
+    g.fillStyle(0x5a6473, alpha);
+    g.fillRect(px(-4), py(-36), s(8), s(30));
+  },
+
+  /**
+   * A pickaxe: the tool, because the job is what distinguishes a sapper. The
+   * head is a curve rather than two straight segments, which read as an arrow.
+   */
+  sapper({ g, px, py, s, accent, alpha }) {
+    g.fillStyle(WOOD, alpha);
+    g.fillRoundedRect(px(-6), py(-22), s(12), s(64), s(4));
+
+    g.lineStyle(s(12), accent, alpha);
+    g.beginPath();
+    for (let i = 0; i <= 12; i++) {
+      const t = -1 + (i / 12) * 2;
+      const x = t * 40;
+      const y = -32 + t * t * 24;
+      if (i === 0) g.moveTo(px(x), py(y));
+      else g.lineTo(px(x), py(y));
+    }
+    g.strokePath();
+    g.fillStyle(0xdfe6f2, alpha * 0.7);
+    g.fillCircle(px(0), py(-32), s(5));
+  },
+
+  // ----------------------------------------------------------------- cards
+
   /** A shield. */
   reinforce({ g, px, py, s, accent, alpha }) {
     g.fillStyle(accent, alpha);
@@ -193,10 +305,13 @@ const ICONS: Record<string, (c: Ctx) => void> = {
   },
 };
 
-/** Card ids that have a drawn symbol. Tested against the deck, so a new card
- *  without art fails a test rather than quietly falling back to a disc. */
-export function hasCardIcon(id: string): boolean {
-  return id in ICONS;
+/**
+ * Whether an id has a drawn symbol. Tested against the deck, the buildable
+ * materials and the troop roster, so anything new fails a test rather than
+ * quietly falling back to a disc.
+ */
+export function hasGlyph(id: string): boolean {
+  return id in GLYPHS;
 }
 
 /** Anything without art gets a plain disc rather than nothing at all. */

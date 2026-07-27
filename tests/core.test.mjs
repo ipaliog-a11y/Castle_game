@@ -2,7 +2,9 @@ import { Castle } from '../src/core/castle.ts';
 import { GRID_COLS, GRID_ROWS } from '../src/core/config.ts';
 import { solveLaunch, solveLaunchAdaptive } from '../src/core/ballistics.ts';
 import { CARDS, DEFENSE_DECK, OFFENSE_DECK } from '../src/core/cards.ts';
-import { hasCardIcon } from '../src/ui/icons.ts';
+import { BUILDABLE } from '../src/core/materials.ts';
+import { UNITS } from '../src/core/units.ts';
+import { hasGlyph } from '../src/ui/icons.ts';
 
 let pass = 0;
 let fail = 0;
@@ -199,16 +201,31 @@ function simulate(x0, y0, vx, vy, tx, ty, steps = 4000, dt = 1 / 240) {
   check('every solved shot flies toward the castle', ok);
 }
 
-// 18. Every card that can be dealt has a drawn symbol. The icon is how a
-// player who cannot read the name tells the cards apart, so a card shipping
-// without one is a real gap, not a cosmetic gap.
+// 18. Everything the player picks from has a drawn symbol. The glyph is how
+// someone who cannot read the name tells them apart, so shipping without one
+// is a real gap, not a cosmetic gap.
 {
   const dealt = [...OFFENSE_DECK, ...DEFENSE_DECK];
-  const missing = dealt.filter((id) => !hasCardIcon(id));
-  check(`every dealt card has an icon (${dealt.length} checked)`, missing.length === 0);
-
-  const orphans = Object.keys(CARDS).filter((id) => !hasCardIcon(id));
-  check('no card definition anywhere is without an icon', orphans.length === 0);
+  check(
+    `every dealt card has a glyph (${dealt.length} checked)`,
+    dealt.every((id) => hasGlyph(id)),
+  );
+  check(
+    'no card definition anywhere is without a glyph',
+    Object.keys(CARDS).every((id) => hasGlyph(id)),
+  );
+  check(
+    `every buildable material has a glyph (${BUILDABLE.length} checked)`,
+    BUILDABLE.every((id) => hasGlyph(id)),
+  );
+  check('the erase tool has a glyph', hasGlyph('erase'));
+  check(
+    `every troop type has a glyph (${Object.keys(UNITS).length} checked)`,
+    Object.keys(UNITS).every((id) => hasGlyph(id)),
+  );
+  // Guard the guard: a typo in hasGlyph that returned true for everything
+  // would make all of the above pass silently.
+  check('hasGlyph rejects an id with no art', !hasGlyph('trebuchet'));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

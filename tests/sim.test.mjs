@@ -41,6 +41,25 @@ const restart = async () => {
 };
 const probe = (fn) => page.evaluate(fn);
 
+/**
+ * Polls `read` until `done` is satisfied, or the wall-clock budget runs out.
+ *
+ * Battle time advances from frame deltas, and headless rendering delivers a
+ * small and load-dependent fraction of real-time frames, so anything phrased as
+ * "wait N seconds then assert" is really asserting on the machine. Polling the
+ * simulation keeps the test about the game.
+ */
+async function waitFor(read, done, budgetMs = 20000) {
+  const deadline = Date.now() + budgetMs;
+  let last = await page.evaluate(read);
+  while (Date.now() < deadline) {
+    if (done(last)) return last;
+    await page.waitForTimeout(200);
+    last = await page.evaluate(read);
+  }
+  return last;
+}
+
 console.log('siege simulation');
 
 await restart();
@@ -77,12 +96,19 @@ const marchStart = await probe(() => {
   s.deploy('knight');
   return s.units[0].x;
 });
-await page.waitForTimeout(11000);
-const marchEnd = await probe(() => {
-  const s = window.__game.scene.getScene('Siege');
-  return { x: s.units[0]?.x ?? -1, alive: s.units.length };
-});
-check('knight crosses the field to the wall within 11s',
+// Wait on the game reaching the wall, not on a wall-clock duration. Headless
+// game time runs at a fraction of real time and that fraction moves with how
+// loaded the machine is, so a fixed sleep here tests the CI box rather than the
+// knight — it failed on an unchanged tree at 22% and passed at 32%.
+const marchEnd = await waitFor(
+  () => {
+    const s = window.__game.scene.getScene('Siege');
+    return { x: s.units[0]?.x ?? -1, alive: s.units.length, t: s.elapsed };
+  },
+  (r) => r.alive === 1 && r.x > 25 * 32 - 60,
+  40000,
+);
+check('a knight marches across the open field to the wall',
   marchEnd.alive === 1 && marchEnd.x > 25 * 32 - 60,
   `${marchStart} -> ${JSON.stringify(marchEnd)}; wall face is at x=800`);
 await page.screenshot({ path: `${SHOT}t2-advance.png` });

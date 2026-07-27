@@ -120,20 +120,21 @@ numbers the three HUDs each carried. `tests/viewport.test.mjs` asserts the 18px
 floor in both battle modes, so a future tweak cannot quietly reintroduce
 8-pixel text.
 
-Left undone: `BuildScene` still positions its palette with literals, and the
-scale does not yet respond to screen size — a tablet gets the same sizes as a
-phone, which is fine but not optimal.
+`BuildScene` is on the same layout now too. Left undone: the scale does not
+respond to screen size — a tablet gets the same sizes as a phone, which is fine
+but not optimal.
 
-### 6.5 Legible to a six-year-old — **first pass done**
+### 6.5 Legible to a six-year-old — **done for now**
 
-Card symbols and the dawn-to-midnight sky (see DESIGN.md). Both exist to move
-meaning out of words and numbers.
+Symbols on every card, build material and troop button, plus the
+dawn-to-midnight sky (see DESIGN.md). All of it moves meaning out of words and
+numbers.
 
-Still word-only, and the obvious next candidates:
+Still word-only:
 
-- The **build palette** — timber, stone and iron are named and priced but not
-  drawn, and `maxSpan` (the number that actually matters) is invisible.
-- The **Knight and Sapper buttons**, which are text and a gold cost.
+- **`maxSpan`** — how far a material can cantilever, which is the number that
+  actually decides a castle, and is invisible in the palette. Pips rather than a
+  digit would keep it pictorial.
 - **Win and lose**, which are a sentence on the result screen.
 
 ### 6.6 Sound
