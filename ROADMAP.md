@@ -54,7 +54,7 @@ The plan as written here was wrong in a way worth recording: it assumed seeding
 so two runs of one seed diverged on frame timing alone — and that same effect
 was quietly making a test fail on an unchanged tree.
 
-### 6.2 Build the balance harness — **next**
+### 6.2 Build the balance harness — **done**
 
 `tests/sim.test.mjs` already drives the real game headless in Chromium, and
 `tests/determinism.test.mjs` shows how to drive the simulation directly rather
@@ -71,32 +71,63 @@ pass/fail test.
   `ballistics.ts`, buy troops when affordable — so the offence side gets numbers
   too. It stands in for a competent player, not a good one.
 
-**Done when** one command prints a table you can read a balance decision off.
+`npm run balance`. Five archetypes plus a bare-throne control, each at the 900g
+budget, through both modes across a batch of seeds. `SEEDS=12` for tighter
+numbers.
 
-### 6.3 Settle the numbers
+The control earns its place: it proves the table discriminates rather than
+being saturated. Everything dies, but the bare throne dies in 4 seconds and a
+thin curtain takes 33, so the differences between rows are real.
 
-Four standing hypotheses, in the order I would test them:
+One correctness note, because it nearly poisoned the first report: the load
+guard originally read "is the throne present" *after* the battle, which made it
+fire on every row the attacker won — that is, all of them. It snapshots before
+the loop now.
 
-1. **Iron is probably the correct answer to everything.** At 45g it has 260 hp,
-   takes 0.55× from blast and 0.3× from melee, and cantilevers 5 cells. If the
-   iron shell beats the stone keep on equal budget by a wide margin, the cost or
-   the resistances are wrong — not both at once.
-2. **The 90-second clock has never met a good castle.** The battle was halved on
-   play feedback and everything timed against it was rescaled by hand — income,
-   energy regen, AI reloads, wave spacing. Those multipliers are arithmetic, not
-   evidence. If the best archetype finishes with most of its blocks standing,
-   ramp the AI harder rather than lengthening the clock again.
-3. **The gold cap is the lever, not the income.** 13/s against a 260 cap and a
-   15g shot on a 900 ms cooldown: sustained fire is gold-limited, and the cap is
-   deliberately a little over one magazine so banking cannot replace playing.
-   Check whether saving up and bursting still beats spending as you go.
-4. **The march is about seven seconds** — a twelfth of the battle now, against a
-   twentieth before. It is the cannon's window, but it is the first thing to
-   shorten if the middle of a battle drags.
+### 6.3 Settle the numbers — **next, and the guesses were wrong**
 
-Numbers live in `src/core/materials.ts` and `src/core/units.ts` and are meant to
-be edited. **Done when** each hypothesis is either confirmed and fixed, or
-recorded as measured and fine.
+First report, 6 seeds per matchup:
+
+```
+  archetype       spend  blocks | AI attacks: win  survived  standing | bot attacks: win   time
+  bare throne        0       0 |            100%  17.8s        0% |             100%      4s
+  thin curtain     900      60 |            100%  67.7s        2% |             100%   33.1s
+  thick keep       825      55 |            100%  40.3s       63% |             100%   17.5s
+  iron shell       855      19 |            100%  38.6s       80% |             100%     26s
+  timber sprawl    900     180 |            100%  39.8s       37% |             100%   21.8s
+  arch fort        900      60 |            100%  69.7s        0% |             100%   27.8s
+```
+
+**The attacker is far too strong.** Every castle falls to both attackers, every
+time. The scripted bot — which only ever shoots the lowest block and buys a
+troop when it can — wins in 17 to 33 seconds of a 90-second battle. It plays no
+cards and does not aim. That is the headline, and it is bigger than any of the
+four hypotheses this section used to hold.
+
+Read the defence column as a floor, not the real experience: those runs play no
+cards at all. The offence column is the damning one, because that *is* the
+player's role.
+
+What the table falsified:
+
+1. **Iron is not dominant — it is second worst.** The iron shell survives 38.6s
+   against the thin curtain's 67.7s. At 45g you can only afford 19 blocks, which
+   is not enough to cover the approach. Iron's problem is the price, not the
+   resistances.
+2. **Spread beats mass, and the reason is the collapse model.** A tall thin
+   screen loses its bottom block, the eleven blocks above lose support, and the
+   rubble lands *in the breach* — the wall partly reheals itself. The thick keep
+   has no such trick and dies in 40s with 63% of it still standing.
+3. **Depth in front of the throne is the only thing that matters.** The throne
+   is fixed at the bottom row, so every attacker bores horizontally along the
+   ground to reach it. Height and mass above that line are wasted, which is why
+   the thick keep can lose with most of itself intact.
+
+That third finding is a design problem, not a tuning one, and it should be
+settled before any number is touched: a castle where only one row matters is not
+a castle. Options, cheapest first — make the throne's row cost the attacker
+something (rubble that must be cleared), let the builder place the throne, or
+make ground-level fire harder than plunging fire.
 
 ### 6.4 Phone legibility and touch targets — **done**
 
