@@ -19,7 +19,8 @@ import { MATERIALS, type MaterialId } from '../core/materials';
 import { store, type PlayerSide } from '../core/store';
 import { UNITS, type UnitDef, type UnitId } from '../core/units';
 import { CastleView } from '../ui/CastleView';
-import { FONT, drawBackdrop } from '../ui/theme';
+import { SkyView } from '../ui/sky';
+import { FONT } from '../ui/theme';
 
 export const BALL_GRAVITY = 900;
 const DEBRIS_GRAVITY = 1150;
@@ -97,6 +98,7 @@ const FLOATER_LIFE = 1.05;
  */
 export abstract class BattleScene extends Phaser.Scene {
   protected castle!: Castle;
+  protected sky!: SkyView;
   protected view!: CastleView;
   protected fx!: Phaser.GameObjects.Graphics;
   /** Shells and their trails, drawn above the HUD so the card bar never hides one. */
@@ -152,7 +154,8 @@ export abstract class BattleScene extends Phaser.Scene {
     this.castleDamageMul = 1;
     this.rallyUntil = 0;
 
-    drawBackdrop(this, WORLD_WIDTH, WORLD_HEIGHT, GROUND_Y);
+    this.sky = new SkyView(this, WORLD_WIDTH, WORLD_HEIGHT, GROUND_Y);
+    this.sky.draw(0);
     this.view = new CastleView(this, this.castle, 5);
     this.fx = this.add.graphics().setDepth(10);
     // Above the card bar: a shell in flight must never be hidden by the HUD.
@@ -187,12 +190,22 @@ export abstract class BattleScene extends Phaser.Scene {
     this.updateParticles(dt);
     this.updateFloaters(dt);
 
+    this.sky.draw(this.progress());
     this.view.draw();
     this.drawFx();
     this.onDraw();
 
     const verdict = this.checkEnd();
     if (verdict !== null) this.finishBattle(verdict);
+  }
+
+  /**
+   * How far through the battle we are, 0 to 1. The sky reads this, and so does
+   * the defence AI's difficulty ramp: one clock driving both means the sunset
+   * *is* the halfway warning rather than merely coinciding with it.
+   */
+  protected progress(): number {
+    return Phaser.Math.Clamp(1 - this.timeLeft / SIEGE_DURATION_MS, 0, 1);
   }
 
   // ------------------------------------------------------------ projectiles

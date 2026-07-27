@@ -124,7 +124,19 @@ Left undone: `BuildScene` still positions its palette with literals, and the
 scale does not yet respond to screen size — a tablet gets the same sizes as a
 phone, which is fine but not optimal.
 
-### 6.5 Sound
+### 6.5 Legible to a six-year-old — **first pass done**
+
+Card symbols and the dawn-to-midnight sky (see DESIGN.md). Both exist to move
+meaning out of words and numbers.
+
+Still word-only, and the obvious next candidates:
+
+- The **build palette** — timber, stone and iron are named and priced but not
+  drawn, and `maxSpan` (the number that actually matters) is invisible.
+- The **Knight and Sapper buttons**, which are text and a gold cost.
+- **Win and lose**, which are a sentence on the result screen.
+
+### 6.6 Sound
 
 There is no audio at all, which is the single largest gap in how the game feels.
 A collapse you hear is worth more than a collapse rendered better.
@@ -135,7 +147,7 @@ falling, victory and defeat. Web Audio through Phaser's sound manager.
 Source everything CC0 or synthesize it, and record provenance in `ASSETS.md` as
 it lands — see *Guardrails*.
 
-### 6.6 Impact polish
+### 6.7 Impact polish
 
 Camera shake already scales with damage in `BattleScene`, and blocks tint as
 their hitpoints fall, so this is a short list rather than a system:

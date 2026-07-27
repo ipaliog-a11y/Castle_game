@@ -1,6 +1,8 @@
 import { Castle } from '../src/core/castle.ts';
 import { GRID_COLS, GRID_ROWS } from '../src/core/config.ts';
 import { solveLaunch, solveLaunchAdaptive } from '../src/core/ballistics.ts';
+import { CARDS, DEFENSE_DECK, OFFENSE_DECK } from '../src/core/cards.ts';
+import { hasCardIcon } from '../src/ui/icons.ts';
 
 let pass = 0;
 let fail = 0;
@@ -195,6 +197,18 @@ function simulate(x0, y0, vx, vy, tx, ty, steps = 4000, dt = 1 / 240) {
     if (!s || s.vx <= 0) ok = false;
   }
   check('every solved shot flies toward the castle', ok);
+}
+
+// 18. Every card that can be dealt has a drawn symbol. The icon is how a
+// player who cannot read the name tells the cards apart, so a card shipping
+// without one is a real gap, not a cosmetic gap.
+{
+  const dealt = [...OFFENSE_DECK, ...DEFENSE_DECK];
+  const missing = dealt.filter((id) => !hasCardIcon(id));
+  check(`every dealt card has an icon (${dealt.length} checked)`, missing.length === 0);
+
+  const orphans = Object.keys(CARDS).filter((id) => !hasCardIcon(id));
+  check('no card definition anywhere is without an icon', orphans.length === 0);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

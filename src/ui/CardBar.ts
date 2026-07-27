@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import type { CardDef, CardEngine } from '../core/cards';
-import { CARD, CARD_TOP, FONT_SIZE, assertCardBarClearsCannon } from './layout';
+import { drawCardIcon } from './icons';
+import { CARD, CARD_TEXT_X, CARD_TOP, FONT_SIZE, assertCardBarClearsCannon } from './layout';
 import { COLORS, FONT, panel } from './theme';
 
 /**
@@ -12,6 +13,9 @@ import { COLORS, FONT, panel } from './theme';
  * The energy total is spelled out as a number *and* drawn as one pip per point,
  * because "can I afford the 5-cost card right now" is a question a smooth bar
  * cannot answer.
+ *
+ * Each card leads with a drawn symbol and its cost beneath, so the card can be
+ * recognised and priced without reading the name — see `icons.ts`.
  */
 export class CardBar {
   private g: Phaser.GameObjects.Graphics;
@@ -46,7 +50,7 @@ export class CardBar {
       const cy = this.slotY(i);
       this.nameText.push(
         scene.add
-          .text(CARD.x + 12, cy + 10, '', {
+          .text(CARD_TEXT_X, cy + 12, '', {
             fontFamily: FONT,
             fontSize: `${FONT_SIZE.cardName}px`,
             color: COLORS.text,
@@ -56,25 +60,25 @@ export class CardBar {
       );
       this.blurbText.push(
         scene.add
-          .text(CARD.x + 12, cy + 38, '', {
+          .text(CARD_TEXT_X, cy + 40, '', {
             fontFamily: FONT,
             fontSize: `${FONT_SIZE.cardBlurb}px`,
             color: COLORS.dim,
-            wordWrap: { width: CARD.w - 26 },
+            wordWrap: { width: CARD.x + CARD.w - CARD_TEXT_X - 12 },
           })
           .setDepth(51)
           .setScrollFactor(0),
       );
-      // Cost rides on the name's line, top right. Along the bottom it collided
-      // with any blurb that wrapped to a third line, which several do.
+      // Cost sits directly under the symbol. Pairing the two means the whole
+      // left edge of the card answers "what is it, and can I afford it".
       this.costText.push(
         scene.add
-          .text(CARD.x + CARD.w - 12, cy + 10, '', {
+          .text(this.iconX(), cy + CARD.h - 26, '', {
             fontFamily: FONT,
             fontSize: `${FONT_SIZE.cardCost}px`,
             color: COLORS.gold,
           })
-          .setOrigin(1, 0)
+          .setOrigin(0.5, 0)
           .setDepth(51)
           .setScrollFactor(0),
       );
@@ -99,6 +103,11 @@ export class CardBar {
 
   private slotY(i: number): number {
     return CARD_TOP + i * (CARD.h + CARD.gap);
+  }
+
+  /** Centre of the symbol box, which the cost is centred under too. */
+  private iconX(): number {
+    return CARD.x + CARD.iconPad + CARD.icon / 2;
   }
 
   /** True when the pointer is over the bar, so the world should ignore it. */
@@ -140,6 +149,16 @@ export class CardBar {
       // Accent stripe so cards read as distinct at a glance.
       g.fillStyle(card.accent, playable ? 1 : 0.35);
       g.fillRoundedRect(CARD.x, cy, 5, CARD.h, 2);
+
+      drawCardIcon(
+        g,
+        card.id,
+        this.iconX(),
+        cy + 12 + CARD.icon / 2,
+        CARD.icon,
+        card.accent,
+        playable ? 1 : 0.4,
+      );
 
       this.nameText[i].setText(card.name).setColor(playable ? COLORS.text : COLORS.dim);
       this.blurbText[i].setText(card.blurb).setAlpha(playable ? 1 : 0.5);

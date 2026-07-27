@@ -6,7 +6,6 @@ import {
   CANNON_Y,
   CELL,
   GRID_ROWS,
-  SIEGE_DURATION_MS,
   WORLD_WIDTH,
   colToX,
   rowToY,
@@ -77,9 +76,12 @@ export class DefendScene extends BattleScene {
 
   // ------------------------------------------------------------------- ai
 
-  /** 0 at the opening, 1 by the final seconds. Drives the difficulty ramp. */
+  /**
+   * 0 at the opening, 1 by the final seconds. Drives the difficulty ramp, and
+   * is the same value the sky runs on — so the assault peaks in the dark.
+   */
   private pressure(): number {
-    return Phaser.Math.Clamp(1 - this.timeLeft / SIEGE_DURATION_MS, 0, 1);
+    return this.progress();
   }
 
   private runAi(deltaMs: number): void {
