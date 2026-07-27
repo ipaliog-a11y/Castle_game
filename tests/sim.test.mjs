@@ -231,6 +231,79 @@ const timeout = await probe(() => ({
 }));
 check('running out of time also ends the siege', timeout.active.includes('Result'), JSON.stringify(timeout));
 
+
+// --- Sandbox: no clock, no economy, and a counter that tells the truth ------
+//
+// The "smashed" tally is the only number the sandbox shows, and it is the one a
+// young player watches. It must equal the blocks that actually left the castle:
+// rubble which survives a fall is re-placed as a real block, so a naive count
+// of what is missing reads near zero while a wall is pounded into a heap. The
+// wall cases matter more than the single-block ones — a collapse kills blocks
+// through paths a lone shot never touches, and one of those went uncounted
+// until this test was written.
+await page.evaluate(() => {
+  const wall = [[35, 15, 'throne']];
+  for (let r = 15; r >= 11; r--) for (let c = 29; c <= 34; c++) wall.push([c, r, 'stone']);
+  localStorage.setItem('siege-and-stone:castle:v1', JSON.stringify({ v: 1, spent: 0, blocks: wall }));
+});
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(500);
+await probe(() => {
+  const g = window.__game;
+  for (const k of ['Menu', 'Build', 'Siege', 'Defend', 'Result']) g.scene.stop(k);
+  g.scene.start('Sandbox');
+});
+await page.waitForTimeout(400);
+
+const sand = await probe(() => {
+  const s = window.__game.scene.getScene('Sandbox');
+  const start = s.castle.count();
+  const hadGold = s.gold !== undefined;
+  for (let i = 0; i < 1800; i++) {
+    const all = s.castle.all();
+    if (all.length) {
+      let best = null;
+      for (const b of all) if (!best || b.row > best.row || (b.row === best.row && b.col < best.col)) best = b;
+      s.aimX = best.col * 32 + 16;
+      s.aimY = 64 + best.row * 32 + 16;
+      if (s.cooldown <= 0) s.fire();
+    }
+    s.step();
+  }
+  return {
+    start,
+    left: s.castle.count(),
+    smashed: s.blocksBroken,
+    finished: s.finished,
+    hadGold,
+    debris: s.debris.length,
+    afterRebuild: (s.rebuild(), s.castle.count()),
+    brokenAfterRebuild: s.blocksBroken,
+    skyLoops: [0, 75000, 150001].map((ms) => {
+      const keep = s.elapsed;
+      s.elapsed = ms;
+      const v = +s.progress().toFixed(3);
+      s.elapsed = keep;
+      return v;
+    }),
+  };
+});
+
+check('sandbox razes the castle given enough free shots', sand.left === 0,
+  JSON.stringify(sand));
+check('sandbox never ends, even with the throne gone', sand.finished === false);
+check('sandbox has no economy at all', sand.hadGold === false);
+check('every block that left the castle was counted as smashed',
+  sand.start - sand.left === sand.smashed && sand.debris === 0,
+  `start ${sand.start}, left ${sand.left}, smashed ${sand.smashed}, debris ${sand.debris}`);
+check('rebuild restores the castle and resets the tally',
+  sand.afterRebuild === sand.start && sand.brokenAfterRebuild === 0,
+  JSON.stringify({ afterRebuild: sand.afterRebuild, broken: sand.brokenAfterRebuild }));
+check('the sandbox sky loops instead of ending at midnight',
+  sand.skyLoops[0] === 0 && sand.skyLoops[1] === 0.5 && sand.skyLoops[2] === 0,
+  JSON.stringify(sand.skyLoops));
+await page.screenshot({ path: `${SHOT}t6-sandbox.png` });
+
 console.log('\nerrors:', errors.length ? errors : 'none');
 console.log(`${pass} passed, ${fail} failed`);
 await browser.close();

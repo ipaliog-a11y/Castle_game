@@ -3,6 +3,7 @@ import { audio } from '../core/audio';
 import { solveLaunchAdaptive } from '../core/ballistics';
 import { CARDS, CardEngine, DEFENSE_DECK, type CardDef } from '../core/cards';
 import {
+  BALL_GRAVITY,
   CANNON_X,
   CANNON_Y,
   CELL,
@@ -17,7 +18,7 @@ import type { UnitId } from '../core/units';
 import { CardBar } from '../ui/CardBar';
 import { BUTTON, FONT_SIZE, TOP_BAR_H } from '../ui/layout';
 import { COLORS, FONT, hudButton, panel } from '../ui/theme';
-import { BALL_GRAVITY, BattleScene } from './BattleScene';
+import { BattleScene } from './BattleScene';
 
 /** How long the target marker shows before the shell is actually fired. */
 const TELEGRAPH_MS = 850;

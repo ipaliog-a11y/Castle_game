@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { audio } from '../core/audio';
 import type { Block, Castle } from '../core/castle';
 import {
+  BALL_GRAVITY,
   CANNON_X,
   CANNON_Y,
   CELL,
@@ -9,6 +10,7 @@ import {
   GROUND_Y,
   SIEGE_DURATION_MS,
   SPAWN_X,
+  STEP_MS,
   WORLD_HEIGHT,
   WORLD_WIDTH,
   colToX,
@@ -24,22 +26,9 @@ import { CastleView } from '../ui/CastleView';
 import { SkyView } from '../ui/sky';
 import { FONT } from '../ui/theme';
 
-export const BALL_GRAVITY = 900;
 const DEBRIS_GRAVITY = 1150;
 const UNIT_GRAVITY = 1500;
 
-/**
- * The simulation advances in fixed slices, never by whatever the last frame
- * happened to take.
- *
- * Two reasons, and the second is the important one. A phone dropping to 30fps
- * used to get materially different physics from a desktop at 60 — Euler
- * integration with a doubled `dt` overshoots — so a wall that held on one
- * device could fall on another. And a battle can only be replayed from a seed
- * if every step is identical, which a variable `dt` makes impossible no matter
- * how well the dice are seeded.
- */
-export const STEP_MS = 1000 / 60;
 /**
  * Ceiling on catch-up per frame. A backgrounded tab hands back a delta of
  * minutes; running that as thousands of steps would lock the page up, so the
@@ -144,6 +133,15 @@ export abstract class BattleScene extends Phaser.Scene {
    */
   protected elapsed = 0;
   protected blocksAtStart = 0;
+  /**
+   * Blocks actually broken, cumulative and never decreasing.
+   *
+   * Not the same as "blocks missing", which is what a naive count gives and is
+   * close to useless: rubble that survives a fall is re-placed as a real block,
+   * so a wall can be pounded into a heap while the census barely moves. This
+   * counts destruction, which is the thing the player is doing.
+   */
+  protected blocksBroken = 0;
   protected finished = false;
 
   /** The battle's dice. Same seed, same battle — see `src/core/rng.ts`. */
@@ -176,6 +174,7 @@ export abstract class BattleScene extends Phaser.Scene {
   protected bootBattle(): void {
     this.castle = store.loadCastle();
     this.blocksAtStart = this.castle.count();
+    this.blocksBroken = 0;
     this.rng = new Rng(seedFromUrl());
     this.accumulator = 0;
 
@@ -213,6 +212,32 @@ export abstract class BattleScene extends Phaser.Scene {
           .setVisible(false),
       );
     }
+  }
+
+  /**
+   * Puts the castle back as it was built and clears everything in flight.
+   *
+   * Reuses the existing sky, effects layers and floater pool rather than going
+   * through `bootBattle` again — that allocates a scene's worth of Phaser
+   * objects, and the sandbox calls this every time a child gets bored.
+   */
+  protected resetCastle(): void {
+    this.castle = store.loadCastle();
+    this.blocksAtStart = this.castle.count();
+    this.blocksBroken = 0;
+    this.balls = [];
+    this.debris = [];
+    this.units = [];
+    this.particles = [];
+    this.floaters = [];
+    this.basesAlive = new Set();
+    for (const block of this.castle.all()) {
+      const card = cardForBase(block.mat);
+      if (card) this.basesAlive.add(card);
+    }
+    this.view.destroy();
+    this.view = new CastleView(this, this.castle, 5);
+    this.view.draw();
   }
 
   // ------------------------------------------------------------- main loop
@@ -375,6 +400,8 @@ export abstract class BattleScene extends Phaser.Scene {
     // The throne overrides the "loudest material" rule. It is the thing the
     // whole battle is about, so a shell that clips it should say so even when a
     // wall beside it soaked up more of the blast.
+    this.blocksBroken += destroyed.length;
+
     const voiced = perMaterial.has('throne') ? 'throne' : loudest;
     if (voiced) {
       audio.play(MATERIALS[voiced].sound, { gain: Math.min(1, 0.45 + dealt / 130) });
@@ -444,12 +471,19 @@ export abstract class BattleScene extends Phaser.Scene {
         const below = this.castle.get(col, restRow + 1);
         if (below) {
           const hit = this.castle.damage(below, impact * 0.8, 'impact');
+          // Rubble can finish off whatever it lands on. This was the one kill
+          // in the game that nothing counted, and it is a real one — a tower
+          // coming down on a weakened wall is how the good collapses happen.
+          if (hit.killed) this.blocksBroken++;
           this.reportHit(d.x + CELL / 2, restY, hit.applied, hit.killed ? 1 : 0);
         }
 
         if (d.hp > 0 && restRow < GRID_ROWS && !this.castle.has(col, restRow)) {
           this.castle.place(col, restRow, d.mat, d.hp / d.maxHp);
         } else {
+          // It did not survive the fall, so it is gone for good rather than
+          // settling as rubble.
+          this.blocksBroken++;
           this.burst(d.x + CELL / 2, restY + CELL / 2, 8, MATERIALS[d.mat].fill, 150);
         }
         // Pitched by how far it fell, so a piece dropping off a high tower
@@ -538,6 +572,7 @@ export abstract class BattleScene extends Phaser.Scene {
               hit.killed ? 1 : 0,
             );
             audio.play('melee', { rate: u.def.id === 'sapper' ? 0.8 : 1.15 });
+            if (hit.killed) this.blocksBroken++;
             u.dealt = 0;
           }
           if (!this.castle.has(aheadCol, feetRow)) this.collapse();

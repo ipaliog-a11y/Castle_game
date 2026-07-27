@@ -5,6 +5,7 @@ import { BuildScene } from './scenes/BuildScene';
 import { DefendScene } from './scenes/DefendScene';
 import { MenuScene } from './scenes/MenuScene';
 import { ResultScene } from './scenes/ResultScene';
+import { SandboxScene } from './scenes/SandboxScene';
 import { SiegeScene } from './scenes/SiegeScene';
 import { installViewport } from './core/viewport';
 
@@ -24,7 +25,7 @@ const game = new Phaser.Game({
   },
   // Structural integrity is solved on the grid, not by a physics engine, so no
   // physics plugin is enabled — see src/core/castle.ts.
-  scene: [MenuScene, BuildScene, DefendScene, SiegeScene, ResultScene],
+  scene: [MenuScene, BuildScene, DefendScene, SiegeScene, SandboxScene, ResultScene],
 });
 
 game.events.once(Phaser.Core.Events.READY, () => installViewport(game));

@@ -27,14 +27,14 @@ export class MenuScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    this.button(WORLD_WIDTH / 2, 276, 'BUILD YOUR CASTLE', 'Spend your budget on walls', () =>
+    this.button(WORLD_WIDTH / 2, 262, 'BUILD YOUR CASTLE', 'Spend your budget on walls', () =>
       this.scene.start('Build'),
     );
 
     const canFight = store.hasCastle();
     this.button(
       WORLD_WIDTH / 2,
-      352,
+      338,
       'HOLD THE KEEP',
       canFight ? 'Defence — survive an AI siege with your cards' : 'Build a castle first',
       () => {
@@ -44,11 +44,24 @@ export class MenuScene extends Phaser.Scene {
     );
     this.button(
       WORLD_WIDTH / 2,
-      428,
+      414,
       'LAY SIEGE',
       canFight ? 'Offence — attack the castle you built' : 'Build a castle first',
       () => {
         if (canFight) this.scene.start('Siege');
+      },
+      canFight,
+    );
+    // No clock, no gold, no opponent. Last in the list because it is the one
+    // without stakes, and first to be useful to anyone who cannot read the
+    // other three.
+    this.button(
+      WORLD_WIDTH / 2,
+      490,
+      'KNOCK IT DOWN',
+      canFight ? 'Free play — unlimited shots, nothing to lose' : 'Build a castle first',
+      () => {
+        if (canFight) this.scene.start('Sandbox');
       },
       canFight,
     );
@@ -62,7 +75,7 @@ export class MenuScene extends Phaser.Scene {
           : `the castle held with ${r.blocksLeft}/${r.blocksAtStart} blocks standing`
       }`;
       this.add
-        .text(WORLD_WIDTH / 2, 500, msg, { fontFamily: FONT, fontSize: '16px', color: COLORS.gold })
+        .text(WORLD_WIDTH / 2, 558, msg, { fontFamily: FONT, fontSize: '16px', color: COLORS.gold })
         .setOrigin(0.5);
     }
   }
