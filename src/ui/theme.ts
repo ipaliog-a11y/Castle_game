@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
+import { audio } from '../core/audio';
 import { drawGlyph } from './icons';
-import { FONT_SIZE } from './layout';
+import { FONT_SIZE, TOUCH_MIN } from './layout';
 import { SkyView } from './sky';
 
 export const COLORS = {
@@ -122,6 +123,47 @@ export function iconButton(
       (_p: Phaser.Input.Pointer, _x: number, _y: number, ev: Phaser.Types.Input.EventData) => {
         ev.stopPropagation();
         onClick();
+      },
+    );
+}
+
+/**
+ * The mute toggle.
+ *
+ * It lives on the calm screens — menu, builder, result — and deliberately not
+ * in a battle HUD. The top bar is the scarcest space in a 600-pixel-tall world
+ * and it is already over its touch-target budget; meanwhile the reason to
+ * silence a game mid-battle is almost always "someone else is in the room",
+ * which the phone's own volume switch answers faster than any button here.
+ *
+ * The symbol is the whole control. A crossed-out speaker needs no caption, and
+ * a child who cannot read the word "sound" can still find it.
+ */
+export function soundButton(scene: Phaser.Scene, cx: number, cy: number): void {
+  const size = TOUCH_MIN;
+  const g = scene.add.graphics().setDepth(41);
+
+  const paint = () => {
+    g.clear();
+    const off = audio.muted;
+    panel(g, cx - size / 2, cy - size / 2, size, size, 0x1d2536, off ? 0x4a5570 : 0x5c6a8a, 0.95, 8);
+    drawGlyph(g, off ? 'soundOff' : 'soundOn', cx, cy, size - 20, off ? 0x6d788f : 0xdfe6f2);
+  };
+  paint();
+
+  scene.add
+    .rectangle(cx, cy, size, size, 0, 0)
+    .setDepth(43)
+    .setInteractive({ useHandCursor: true })
+    .on(
+      'pointerdown',
+      (_p: Phaser.Input.Pointer, _x: number, _y: number, ev: Phaser.Types.Input.EventData) => {
+        ev.stopPropagation();
+        // Unmuting should be audible — a toggle you cannot hear the result of
+        // leaves you tapping it twice to find out which way round it is.
+        const muted = audio.toggleMuted();
+        if (!muted) audio.play('place');
+        paint();
       },
     );
 }

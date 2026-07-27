@@ -1,3 +1,5 @@
+import type { SoundId } from './audio';
+
 export type MaterialId =
   | 'wood'
   | 'stone'
@@ -27,6 +29,12 @@ export interface Material {
   stroke: number;
   /** Rubble that survives a fall keeps this fraction of its max HP at most. */
   brittleness: number;
+  /**
+   * What being hit sounds like. Here rather than in the audio module because it
+   * is the same kind of choice as `fill` — how this material presents itself —
+   * and keeping it beside the colour is what stops the two drifting apart.
+   */
+  sound: SoundId;
 }
 
 export const MATERIALS: Record<MaterialId, Material> = {
@@ -41,6 +49,7 @@ export const MATERIALS: Record<MaterialId, Material> = {
     fill: 0x8a5a34,
     stroke: 0x5d3a20,
     brittleness: 0.9,
+    sound: 'hitWood',
   },
   stone: {
     id: 'stone',
@@ -53,6 +62,7 @@ export const MATERIALS: Record<MaterialId, Material> = {
     fill: 0x8d949e,
     stroke: 0x5c626b,
     brittleness: 0.6,
+    sound: 'hitStone',
   },
   iron: {
     id: 'iron',
@@ -65,6 +75,7 @@ export const MATERIALS: Record<MaterialId, Material> = {
     fill: 0x6b7f9e,
     stroke: 0x3f4d63,
     brittleness: 0.35,
+    sound: 'hitIron',
   },
   /**
    * The three support bases. Each one powers a defence card: build it and you
@@ -84,6 +95,7 @@ export const MATERIALS: Record<MaterialId, Material> = {
     fill: 0x4f9d69,
     stroke: 0x2f6b45,
     brittleness: 1,
+    sound: 'hitStone',
   },
   oilVat: {
     id: 'oilVat',
@@ -96,6 +108,7 @@ export const MATERIALS: Record<MaterialId, Material> = {
     fill: 0xe07b2a,
     stroke: 0x8f4b13,
     brittleness: 1,
+    sound: 'hitWood',
   },
   bastion: {
     id: 'bastion',
@@ -109,6 +122,7 @@ export const MATERIALS: Record<MaterialId, Material> = {
     fill: 0x6b7f9e,
     stroke: 0x3f4d63,
     brittleness: 0.5,
+    sound: 'hitIron',
   },
   throne: {
     id: 'throne',
@@ -129,6 +143,7 @@ export const MATERIALS: Record<MaterialId, Material> = {
     fill: 0xd4a12c,
     stroke: 0x8a660f,
     brittleness: 1,
+    sound: 'hitThrone',
   },
 };
 

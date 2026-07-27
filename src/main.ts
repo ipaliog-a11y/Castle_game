@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { audio, installAudioUnlock } from './core/audio';
 import { WORLD_HEIGHT, WORLD_WIDTH } from './core/config';
 import { BuildScene } from './scenes/BuildScene';
 import { DefendScene } from './scenes/DefendScene';
@@ -28,7 +29,12 @@ const game = new Phaser.Game({
 
 game.events.once(Phaser.Core.Events.READY, () => installViewport(game));
 
+// Browsers keep audio silent until the user has touched the page, so the sound
+// pack starts on the first tap rather than at load. See src/core/audio.ts.
+installAudioUnlock();
+
 // Dev-only handle so the playthrough tests can inspect the running simulation.
 if (import.meta.env.DEV) {
   (window as unknown as { __game: Phaser.Game }).__game = game;
+  (window as unknown as { __audio: typeof audio }).__audio = audio;
 }

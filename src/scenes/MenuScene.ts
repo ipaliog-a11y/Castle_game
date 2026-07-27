@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { GROUND_Y, WORLD_HEIGHT, WORLD_WIDTH } from '../core/config';
 import { store } from '../core/store';
-import { COLORS, FONT, drawBackdrop, panel } from '../ui/theme';
+import { COLORS, FONT, drawBackdrop, panel, soundButton } from '../ui/theme';
 
 export class MenuScene extends Phaser.Scene {
   constructor() {
@@ -10,6 +10,7 @@ export class MenuScene extends Phaser.Scene {
 
   create(): void {
     drawBackdrop(this, WORLD_WIDTH, WORLD_HEIGHT, GROUND_Y);
+    soundButton(this, WORLD_WIDTH - 62, 62);
 
     this.add
       .text(WORLD_WIDTH / 2, 150, 'SIEGE & STONE', {

@@ -89,6 +89,50 @@ take back a mistake cheaply is what makes experimenting with overhangs
 reasonable, and the sparkle on a 2-cell-plus cantilever is there to suggest
 that overhangs are the point.
 
+## What the game sounds like
+
+Eighteen voices, none of them a file. `src/core/audio.ts` builds each one out of
+two primitives — a burst of filtered noise and a pitched tone with an envelope —
+which is enough vocabulary for the whole pack. `ASSETS.md` covers why nothing is
+sampled.
+
+The design problem was not "what should a wall sound like". It was **how many
+sounds a single event is allowed to make**. A cannonball landing in a wall
+damages every block within its radius; a tower going over lands a dozen pieces
+of rubble inside a second; six knights swing at roughly the same moment. Played
+faithfully, each of those is a burst of noise that reads as a glitch rather than
+as an event.
+
+Three rules came out of that, and together they are most of the module:
+
+- **A minimum gap per sound**, in real milliseconds. Two impacts 20ms apart
+  become one. This is also what makes the fixed timestep safe: `update` can run
+  fifteen simulation steps in one frame after a stall, and a real-time throttle
+  folds that whole burst into a single play.
+- **A blast plays one material.** Whichever absorbed the most damage — except
+  the throne, which always wins, because it is the thing the battle is about.
+  One sound means one thing happened.
+- **Scale, do not multiply.** A bigger collapse is the same rumble louder, and
+  rubble is pitched by how far it fell. Intensity is a parameter, not a count.
+
+Two constraints the module has to honour, both of them about not disturbing
+things that already work:
+
+1. **It never touches the battle's dice.** Variation uses `Math.random`, exactly
+   as `BattleScene.burst` does. Drawing from the seeded stream would mean adding
+   a noise silently changed the outcome of every seeded battle.
+2. **Nothing reads it back.** A muted battle and a loud one are the same battle,
+   which is what lets the balance harness run with sound off and still produce
+   numbers that describe the real game. `tests/determinism.test.mjs` runs one
+   seed twice — once silent, once with audio genuinely running — and requires
+   the two to match block for block.
+
+The endings are keyed on whether *the player* won, not on what happened to the
+throne: a fanfare for bringing it down, a settled chime for holding, and a soft
+two-note fall for losing. Losing is deliberately gentle. A harsh buzzer is the
+sound a six-year-old stops playing to, and the thing this game wants next is
+another go.
+
 ## Current state — milestones 1 and 2
 
 Playable end to end in both directions: build a castle, then either besiege it
