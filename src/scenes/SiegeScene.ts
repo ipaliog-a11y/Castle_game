@@ -13,11 +13,21 @@ import {
   UNITS,
   type UnitId,
 } from '../core/units';
+import { settings, type AimMode } from '../core/settings';
 import { CardBar } from '../ui/CardBar';
+import { GunSliders } from '../ui/GunSliders';
 import { drawAimArc } from '../ui/aimView';
 import { BUTTON, FONT_SIZE, TOP_BAR_H } from '../ui/layout';
-import { COLORS, FONT, hudButton, iconButton, panel } from '../ui/theme';
+import { GameMenus } from '../ui/menus';
+import { COLORS, FONT, glyphButton, iconButton, panel } from '../ui/theme';
 import { BattleScene } from './BattleScene';
+
+/** The hint has to describe the control the player actually has. */
+const AIM_HINT: Record<AimMode, string> = {
+  easy: 'Touch where you want to hit — release to fire.',
+  advanced: 'Touch to aim. The arc fades out halfway — judge the rest.',
+  expert: 'Set the angle and power, then tap the field to fire.',
+};
 
 /** Gold earned between income plinks. */
 const GOLD_CHIME = 25;
@@ -35,6 +45,8 @@ export class SiegeScene extends BattleScene {
 
   private cards!: CardEngine;
   private cardBar!: CardBar;
+  private menus!: GameMenus;
+  private sliders!: GunSliders;
   private aiming = false;
   /** Where the player is pointing — the shot's *target*, not a direction. */
   private aimX = 0;
@@ -65,6 +77,14 @@ export class SiegeScene extends BattleScene {
     // Above the card column: the aim arc is the whole interface, and the
     // moment it disappears behind a card the shot becomes a guess.
     this.aimG = this.add.graphics().setDepth(55);
+    this.sliders = new GunSliders(this);
+    this.sliders.setVisible(settings.aimMode === 'expert');
+    this.menus = new GameMenus(this, {
+      onResume: () => this.setPaused(false),
+      onGiveUp: () => this.finishBattle(false),
+      giveUpLabel: 'Give up',
+      onMenu: () => this.scene.start('Menu'),
+    });
     this.cards = new CardEngine(OFFENSE_DECK, { rng: this.rng });
     this.buildHud();
     this.bindInput();
@@ -75,7 +95,12 @@ export class SiegeScene extends BattleScene {
 
   private bindInput(): void {
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      if (this.finished || this.cardBar.hits(p.x, p.y) || p.y < TOP_BAR_H) return;
+      if (this.finished || this.menus.isOpen) return;
+      if (this.cardBar.hits(p.x, p.y) || p.y < TOP_BAR_H) return;
+
+      // Sliders get first refusal. Every adjustment ends in a release, so a
+      // drag that also counted as an aim would fire the gun on every tweak.
+      if (settings.aimMode === 'expert' && this.sliders.grab(p.worldX, p.worldY)) return;
 
       if (this.cardBar.armedSlot >= 0) {
         this.resolveTargeted(this.cardBar.armedSlot, p.worldX, p.worldY);
@@ -87,18 +112,34 @@ export class SiegeScene extends BattleScene {
     });
 
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
+      if (this.sliders.drag(p.worldX, p.worldY)) return;
       if (!this.aiming) return;
       this.aimX = p.worldX;
       this.aimY = p.worldY;
     });
 
     const release = () => {
+      if (this.sliders.isDragging) {
+        this.sliders.release();
+        return;
+      }
       if (!this.aiming) return;
       this.aiming = false;
       this.fire();
     };
     this.input.on('pointerup', release);
     this.input.on('pointerupoutside', release);
+  }
+
+  /**
+   * The shot the current control scheme describes.
+   *
+   * Easy and advanced solve backwards from a target; expert reads the sliders.
+   * Everything downstream — firing, the barrel angle, the preview — goes
+   * through here, so adding a mode never means finding three call sites.
+   */
+  private currentAim() {
+    return settings.aimMode === 'expert' ? this.sliders.aim() : solveAim(this.aimX, this.aimY);
   }
 
   private fire(): void {
@@ -110,7 +151,7 @@ export class SiegeScene extends BattleScene {
     this.gold -= SHOT_GOLD;
     this.cooldown = SHOT_COOLDOWN_MS;
 
-    const { vx, vy } = solveAim(this.aimX, this.aimY);
+    const { vx, vy } = this.currentAim();
     const powered = this.shotMod === 'power';
     const spread = this.shotMod === 'chain' ? [-0.13, 0, 0.13] : [0];
 
@@ -200,6 +241,8 @@ export class SiegeScene extends BattleScene {
   protected onDraw(): void {
     this.drawAim();
     this.refreshHud();
+    // Switching modes from the options panel takes effect the moment it closes.
+    this.sliders.setVisible(settings.aimMode === 'expert');
   }
 
   protected checkEnd(): boolean | null {
@@ -209,7 +252,7 @@ export class SiegeScene extends BattleScene {
   }
 
   protected override cannonAngle(): number {
-    const { vx, vy } = solveAim(this.aimX, this.aimY);
+    const { vx, vy } = this.currentAim();
     return Math.atan2(vy, vx);
   }
 
@@ -229,8 +272,13 @@ export class SiegeScene extends BattleScene {
       return;
     }
 
+    if (settings.aimMode === 'expert') {
+      this.sliders.draw();
+      drawAimArc(g, this.castle, this.sliders.aim(), this.aimX, this.aimY, 'expert');
+      return;
+    }
     if (!this.aiming) return;
-    drawAimArc(g, this.castle, solveAim(this.aimX, this.aimY), this.aimX, this.aimY);
+    drawAimArc(g, this.castle, solveAim(this.aimX, this.aimY), this.aimX, this.aimY, settings.aimMode);
   }
 
   // ------------------------------------------------------------------ hud
@@ -296,18 +344,34 @@ export class SiegeScene extends BattleScene {
       `${UNITS.sapper.name} ${UNITS.sapper.gold}g`,
       () => this.deploy('sapper'),
     );
-    hudButton(this, 1160, midY, 180, BUTTON.h, 'Give up', () => this.finishBattle(false));
+    // Pause replaces the old Give up button, and Give up moves inside it.
+    // Ending your own battle should not be one mis-tap away while playing, and
+    // a pause menu is exactly where an action like that belongs.
+    glyphButton(this, 1150, midY, 'pause', () => this.togglePause());
+    glyphButton(this, 1218, midY, 'options', () => this.openOptions());
 
     this.cardBar = new CardBar(this, this.cards, (slot, card) => this.onCardPressed(slot, card));
 
     this.add
-      .text(WORLD_WIDTH / 2 + 80, TOP_BAR_H + 54, 'Touch where you want to hit — release to fire.', {
+      .text(WORLD_WIDTH / 2 + 80, TOP_BAR_H + 54, AIM_HINT[settings.aimMode], {
         fontFamily: FONT,
         fontSize: `${FONT_SIZE.small}px`,
         color: COLORS.dim,
       })
       .setOrigin(0.5)
       .setDepth(41);
+  }
+
+  private togglePause(): void {
+    if (this.finished) return;
+    this.setPaused(!this.paused);
+    this.menus.toggle();
+  }
+
+  private openOptions(): void {
+    if (this.finished) return;
+    this.setPaused(true);
+    this.menus.openOptions();
   }
 
   /** Transient status message; sticky ones stay until explicitly cleared. */

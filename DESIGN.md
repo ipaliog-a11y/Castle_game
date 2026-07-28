@@ -133,6 +133,72 @@ two-note fall for losing. Losing is deliberately gentle. A harsh buzzer is the
 sound a six-year-old stops playing to, and the thing this game wants next is
 another go.
 
+## Pausing, and where the settings live
+
+**Pause** is the hit stop with the timer taken off. `update` stops feeding the
+accumulator, so the simulation resumes on exactly the step it was about to run,
+and because battle time is counted in steps a paused battle costs the player
+none of their ninety seconds. Nothing in `step` reads it, so a run driven
+directly — the balance harness, most of the tests — cannot tell the difference.
+`tests/determinism.test.mjs` asserts that, the same way it does for the hit stop
+and for audio.
+
+One detail that is easy to get wrong: resuming clears the accumulator. Without
+that, the frame after a menu closes hands back however long the menu was open,
+and the battle lurches forward by the whole catch-up cap the instant play
+continues.
+
+**Give up and Surrender moved inside the pause menu.** Conceding is not
+something that should sit one mis-tap from the card you were reaching for, and a
+pause menu is exactly where an irreversible action belongs. That also freed the
+top-bar space the pause and options buttons now use, so the bar carries no more
+than it did.
+
+The **options panel** and the pause menu are one overlay showing different rows,
+because each is reached through the other. It is built once and shown, not
+created on demand — a menu that allocates a dozen objects every time it opens
+stutters on the device where that matters, and the pause button is the one
+control a player mashes. The blocker underneath is load-bearing rather than
+decorative: without it a tap that misses a row falls through to the scene and
+fires the cannon at whatever is behind the panel.
+
+Sound moved into options and the standalone mute button went away. Two ways to
+change one setting is one too many.
+
+## Three ways to aim
+
+A ladder, each rung strictly harder, chosen in options and persisted.
+
+- **Easy** — touch the target. The arc is drawn the whole way and rings the spot
+  it will actually reach. This is what the aiming was designed around and stays
+  the default.
+- **Advanced** — the same control, but the preview stops at mid-field. That cut
+  is not an arbitrary halfway: the build zone starts at column 20, so it is very
+  nearly where the shell crosses from open ground onto the castle. The half that
+  gets hidden is the half that decides whether a shot lands.
+- **Expert** — no target at all. An elevation slider and a power slider, the two
+  numbers the solver would otherwise work out for you, with the same truncated
+  preview. It is a different skill rather than a harder version of the same one:
+  you learn arcs instead of learning to point.
+
+The invariant, and the one the tests guard: **the harder modes change what the
+player can see, never what the gun does.** Easy and advanced produce a
+bit-identical shot for the same target. A preview that lied about the ballistics
+would be a bug wearing a difficulty setting's clothes.
+
+Placing the expert sliders took two attempts. The obvious spot is around the gun
+— bottom-left, under the thumb already there — but in a siege that corner is the
+card column, and the first version buried both sliders under a hand of cards
+where they could be neither seen nor grabbed. The field is more crowded than it
+looks: the top bar owns the strip above, the cards own the left down to y≈490,
+the castle owns everything past x=640, and troops march along the ground band.
+The sliders live in the block between the cards and the castle, which is as near
+the gun as anything can actually be.
+
+Sliders also take the pointer before anything else does. Every adjustment ends
+in a release, and a release is what fires the gun, so a drag that also counted
+as an aim would fire on every tweak.
+
 ## Reading a block's condition
 
 Damage is drawn as four discrete stages, not a continuous tint, and the

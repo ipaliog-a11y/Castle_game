@@ -16,8 +16,9 @@ import { CARD_BASES, MATERIALS, isBase } from '../core/materials';
 import type { PlayerSide } from '../core/store';
 import type { UnitId } from '../core/units';
 import { CardBar } from '../ui/CardBar';
-import { BUTTON, FONT_SIZE, TOP_BAR_H } from '../ui/layout';
-import { COLORS, FONT, hudButton, panel } from '../ui/theme';
+import { FONT_SIZE, TOP_BAR_H } from '../ui/layout';
+import { GameMenus } from '../ui/menus';
+import { COLORS, FONT, glyphButton, panel } from '../ui/theme';
 import { BattleScene } from './BattleScene';
 
 /** How long the target marker shows before the shell is actually fired. */
@@ -40,6 +41,7 @@ export class DefendScene extends BattleScene {
   private overlay!: Phaser.GameObjects.Graphics;
   private cards!: CardEngine;
   private cardBar!: CardBar;
+  private menus!: GameMenus;
 
   private reloadTimer = 0;
   private waveTimer = 0;
@@ -74,6 +76,12 @@ export class DefendScene extends BattleScene {
     // Above the card column, so a targeting circle dragged over the hand is
     // still visible where it matters.
     this.overlay = this.add.graphics().setDepth(55);
+    this.menus = new GameMenus(this, {
+      onResume: () => this.setPaused(false),
+      onGiveUp: () => this.finishBattle(true),
+      giveUpLabel: 'Surrender',
+      onMenu: () => this.scene.start('Menu'),
+    });
     this.cards = new CardEngine(this.availableDeck(), {
       start: 6,
       regenPerSec: 1.15,
@@ -251,7 +259,8 @@ export class DefendScene extends BattleScene {
 
   private bindInput(): void {
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      if (this.finished || this.cardBar.hits(p.x, p.y) || p.y < TOP_BAR_H) return;
+      if (this.finished || this.menus.isOpen) return;
+      if (this.cardBar.hits(p.x, p.y) || p.y < TOP_BAR_H) return;
       if (this.cardBar.armedSlot >= 0) {
         this.resolveTargeted(this.cardBar.armedSlot, p.worldX, p.worldY);
       }
@@ -391,9 +400,10 @@ export class DefendScene extends BattleScene {
       .setOrigin(1, 0.5)
       .setDepth(41);
 
-    hudButton(this, WORLD_WIDTH - 106, midY, BUTTON.w, BUTTON.h, 'Surrender', () =>
-      this.finishBattle(true),
-    );
+    // Surrender moves inside the pause menu: conceding should not be one
+    // mis-tap away from the card you were reaching for.
+    glyphButton(this, WORLD_WIDTH - 106, midY, 'pause', () => this.togglePause());
+    glyphButton(this, WORLD_WIDTH - 38, midY, 'options', () => this.openOptions());
 
     this.cardBar = new CardBar(this, this.cards, (slot, card) => this.onCardPressed(slot, card));
 
@@ -407,6 +417,18 @@ export class DefendScene extends BattleScene {
       )
       .setOrigin(0.5)
       .setDepth(41);
+  }
+
+  private togglePause(): void {
+    if (this.finished) return;
+    this.setPaused(!this.paused);
+    this.menus.toggle();
+  }
+
+  private openOptions(): void {
+    if (this.finished) return;
+    this.setPaused(true);
+    this.menus.openOptions();
   }
 
   private flash(msg: string, sticky = false): void {

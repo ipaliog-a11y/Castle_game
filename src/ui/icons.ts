@@ -304,6 +304,29 @@ const GLYPHS: Record<string, (c: Ctx) => void> = {
     g.fillRect(px(-24), py(-14), s(48), s(12));
   },
 
+  // ------------------------------------------------------------------ hud
+
+  /** Two bars. Universally "pause", and readable at any size. */
+  pause({ g, px, py, s, accent, alpha }) {
+    g.fillStyle(accent, alpha);
+    g.fillRect(px(-26), py(-32), s(18), s(64));
+    g.fillRect(px(8), py(-32), s(18), s(64));
+  },
+
+  /** A cog. The one symbol everyone already reads as "settings". */
+  options({ g, px, py, s, accent, alpha }) {
+    g.fillStyle(accent, alpha);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const cx = px(Math.cos(a) * 34);
+      const cy = py(Math.sin(a) * 34);
+      g.fillRect(cx - s(9), cy - s(9), s(18), s(18));
+    }
+    g.fillCircle(px(0), py(0), s(30));
+    g.fillStyle(0x141a26, alpha);
+    g.fillCircle(px(0), py(0), s(13));
+  },
+
   // ----------------------------------------------------------------- sound
 
   /** A speaker cone with two waves coming off it. */

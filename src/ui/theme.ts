@@ -128,6 +128,38 @@ export function iconButton(
 }
 
 /**
+ * A square, symbol-only HUD button.
+ *
+ * For the controls that need no caption — pause, options — and that have to fit
+ * a top bar already carrying gold, a clock and two troop buttons. A cog and two
+ * bars are understood without words, which is the only reason there is room for
+ * them at all.
+ */
+export function glyphButton(
+  scene: Phaser.Scene,
+  cx: number,
+  cy: number,
+  glyph: string,
+  onClick: () => void,
+  size = 56,
+): void {
+  const g = scene.add.graphics().setDepth(41);
+  panel(g, cx - size / 2, cy - size / 2, size, size, 0x1d2536, 0x5c6a8a, 0.95, 6);
+  drawGlyph(g, glyph, cx, cy, size - 22, 0xdfe6f2);
+  scene.add
+    .rectangle(cx, cy, size, size, 0, 0)
+    .setDepth(43)
+    .setInteractive({ useHandCursor: true })
+    .on(
+      'pointerdown',
+      (_p: Phaser.Input.Pointer, _x: number, _y: number, ev: Phaser.Types.Input.EventData) => {
+        ev.stopPropagation();
+        onClick();
+      },
+    );
+}
+
+/**
  * The mute toggle.
  *
  * It lives on the calm screens — menu, builder, result — and deliberately not

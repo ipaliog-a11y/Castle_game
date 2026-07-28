@@ -4,9 +4,12 @@ import { audio } from '../core/audio';
 import { WORLD_WIDTH } from '../core/config';
 import type { PlayerSide } from '../core/store';
 import { UNITS, type UnitId } from '../core/units';
+import { settings, type AimMode } from '../core/settings';
+import { GunSliders } from '../ui/GunSliders';
 import { drawAimArc } from '../ui/aimView';
 import { BUTTON, FONT_SIZE, TOP_BAR_H } from '../ui/layout';
-import { COLORS, FONT, hudButton, iconButton, panel } from '../ui/theme';
+import { GameMenus } from '../ui/menus';
+import { COLORS, FONT, glyphButton, hudButton, iconButton, panel } from '../ui/theme';
 import { BattleScene } from './BattleScene';
 
 /**
@@ -31,6 +34,12 @@ const SHOT_RADIUS = 1.6;
 
 /** Troops are free too, so the field needs a ceiling somewhere. */
 const MAX_UNITS = 14;
+
+const AIM_HINT: Record<AimMode, string> = {
+  easy: 'Touch where you want to hit. Nothing can be lost here.',
+  advanced: 'The arc fades out halfway. Judge the rest.',
+  expert: 'Set the angle and power, then tap the field to fire.',
+};
 
 /** How long one dawn-to-midnight cycle takes here. It loops rather than ends. */
 const SKY_CYCLE_MS = 150_000;
@@ -61,6 +70,8 @@ export class SandboxScene extends BattleScene {
   private throneWasStanding = true;
   private flashUntil = 0;
 
+  private menus!: GameMenus;
+  private sliders!: GunSliders;
   private countText!: Phaser.GameObjects.Text;
   private statusText!: Phaser.GameObjects.Text;
 
@@ -78,6 +89,13 @@ export class SandboxScene extends BattleScene {
     this.aimY = 400;
 
     this.aimG = this.add.graphics().setDepth(55);
+    this.sliders = new GunSliders(this);
+    this.sliders.setVisible(settings.aimMode === 'expert');
+    // No Give up row: there is nothing here to lose, which is the whole point.
+    this.menus = new GameMenus(this, {
+      onResume: () => this.setPaused(false),
+      onMenu: () => this.scene.start('Menu'),
+    });
     this.buildHud();
     this.bindInput();
     this.view.draw();
@@ -87,17 +105,23 @@ export class SandboxScene extends BattleScene {
 
   private bindInput(): void {
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      if (p.y < TOP_BAR_H) return;
+      if (p.y < TOP_BAR_H || this.menus.isOpen) return;
+      if (settings.aimMode === 'expert' && this.sliders.grab(p.worldX, p.worldY)) return;
       this.aiming = true;
       this.aimX = p.worldX;
       this.aimY = p.worldY;
     });
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
+      if (this.sliders.drag(p.worldX, p.worldY)) return;
       if (!this.aiming) return;
       this.aimX = p.worldX;
       this.aimY = p.worldY;
     });
     const release = () => {
+      if (this.sliders.isDragging) {
+        this.sliders.release();
+        return;
+      }
       if (!this.aiming) return;
       this.aiming = false;
       this.fire();
@@ -106,10 +130,15 @@ export class SandboxScene extends BattleScene {
     this.input.on('pointerupoutside', release);
   }
 
+  /** Whichever control scheme is selected. See SiegeScene for the reasoning. */
+  private currentAim() {
+    return settings.aimMode === 'expert' ? this.sliders.aim() : solveAim(this.aimX, this.aimY);
+  }
+
   private fire(): void {
     if (this.cooldown > 0) return;
     this.cooldown = SHOT_COOLDOWN_MS;
-    const { vx, vy } = solveAim(this.aimX, this.aimY);
+    const { vx, vy } = this.currentAim();
     this.launch(vx, vy, SHOT_DAMAGE, SHOT_RADIUS);
   }
 
@@ -148,8 +177,12 @@ export class SandboxScene extends BattleScene {
   protected onDraw(): void {
     const g = this.aimG;
     g.clear();
-    if (this.aiming) {
-      drawAimArc(g, this.castle, solveAim(this.aimX, this.aimY), this.aimX, this.aimY);
+    this.sliders.setVisible(settings.aimMode === 'expert');
+    if (settings.aimMode === 'expert') {
+      this.sliders.draw();
+      drawAimArc(g, this.castle, this.sliders.aim(), this.aimX, this.aimY, 'expert');
+    } else if (this.aiming) {
+      drawAimArc(g, this.castle, solveAim(this.aimX, this.aimY), this.aimX, this.aimY, settings.aimMode);
     }
     this.refreshHud();
   }
@@ -169,7 +202,7 @@ export class SandboxScene extends BattleScene {
   }
 
   protected override cannonAngle(): number {
-    const { vx, vy } = solveAim(this.aimX, this.aimY);
+    const { vx, vy } = this.currentAim();
     return Math.atan2(vy, vx);
   }
 
@@ -204,11 +237,19 @@ export class SandboxScene extends BattleScene {
     iconButton(this, 728, midY, BUTTON.w, BUTTON.h, 'sapper', UNITS.sapper.fill, 'Sapper', () =>
       this.deploy('sapper'),
     );
-    hudButton(this, 928, midY, 180, BUTTON.h, 'REBUILD', () => this.rebuild());
-    hudButton(this, 1122, midY, 170, BUTTON.h, 'Menu', () => this.scene.start('Menu'));
+    hudButton(this, 920, midY, 176, BUTTON.h, 'REBUILD', () => this.rebuild());
+    glyphButton(this, 1052, midY, 'pause', () => {
+      this.setPaused(!this.paused);
+      this.menus.toggle();
+    });
+    glyphButton(this, 1120, midY, 'options', () => {
+      this.setPaused(true);
+      this.menus.openOptions();
+    });
+    hudButton(this, 1214, midY, 116, BUTTON.h, 'Menu', () => this.scene.start('Menu'));
 
     this.statusText = this.add
-      .text(WORLD_WIDTH / 2, TOP_BAR_H + 26, 'Touch where you want to hit. Nothing can be lost here.', {
+      .text(WORLD_WIDTH / 2, TOP_BAR_H + 26, AIM_HINT[settings.aimMode], {
         fontFamily: FONT,
         fontSize: `${FONT_SIZE.small}px`,
         color: COLORS.dim,
@@ -226,7 +267,7 @@ export class SandboxScene extends BattleScene {
     this.countText.setText(`${this.blocksBroken} smashed`);
     if (this.flashUntil > 0 && this.elapsed >= this.flashUntil) {
       this.flashUntil = 0;
-      this.statusText.setText('Touch where you want to hit. Nothing can be lost here.');
+      this.statusText.setText(AIM_HINT[settings.aimMode]);
     }
   }
 }

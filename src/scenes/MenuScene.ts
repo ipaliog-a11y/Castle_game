@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import { GROUND_Y, WORLD_HEIGHT, WORLD_WIDTH } from '../core/config';
 import { store } from '../core/store';
-import { COLORS, FONT, drawBackdrop, panel, soundButton } from '../ui/theme';
+import { GameMenus } from '../ui/menus';
+import { COLORS, FONT, drawBackdrop, glyphButton, panel } from '../ui/theme';
 
 export class MenuScene extends Phaser.Scene {
   constructor() {
@@ -10,7 +11,10 @@ export class MenuScene extends Phaser.Scene {
 
   create(): void {
     drawBackdrop(this, WORLD_WIDTH, WORLD_HEIGHT, GROUND_Y);
-    soundButton(this, WORLD_WIDTH - 62, 62);
+    // Options replaces the standalone mute toggle: sound is one of the settings
+    // now, and two ways to change it is one too many.
+    const menus = new GameMenus(this);
+    glyphButton(this, WORLD_WIDTH - 62, 62, 'options', () => menus.openOptions(), 68);
 
     this.add
       .text(WORLD_WIDTH / 2, 150, 'SIEGE & STONE', {

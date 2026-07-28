@@ -386,6 +386,103 @@ check('the camera returns to its resting zoom', recovered.zoom === 1, JSON.strin
 check('the freeze lifts on its own', recovered.hitStop <= 0, JSON.stringify(recovered));
 check('the word clears itself', recovered.shouting === false, JSON.stringify(recovered));
 
+
+// --- Pause, options and the three aim modes ---------------------------------
+await restart();
+
+const pauseCheck = await probe(() => {
+  const s = window.__game.scene.getScene('Siege');
+  s.setPaused(false);
+  const before = s.elapsed;
+  s.setPaused(true);
+  // The frame loop is what honours a pause, so drive it rather than `step`.
+  for (let i = 0; i < 40; i++) s.update(0, 16.7);
+  const held = s.elapsed;
+  s.setPaused(false);
+  for (let i = 0; i < 40; i++) s.update(0, 16.7);
+  return { advancedWhilePaused: +(held - before).toFixed(2),
+           advancedAfterResume: +(s.elapsed - held).toFixed(2) };
+});
+check('a paused battle does not advance', pauseCheck.advancedWhilePaused === 0,
+  JSON.stringify(pauseCheck));
+check('resuming starts it again', pauseCheck.advancedAfterResume > 0, JSON.stringify(pauseCheck));
+
+// The overlay's blocker is the whole reason a pause menu is safe: without it a
+// tap that misses a menu row falls through and fires the cannon at whatever is
+// behind the panel.
+await restart();
+const blocked = await probe(() => {
+  const s = window.__game.scene.getScene('Siege');
+  s.togglePause();
+  const paused = s.paused && s.menus.isOpen;
+  const goldBefore = s.gold;
+  const ballsBefore = s.balls.length;
+  s.input.emit('pointerdown', { x: 640, y: 300, worldX: 640, worldY: 300 });
+  s.input.emit('pointerup', { x: 640, y: 300, worldX: 640, worldY: 300 });
+  const fired = s.balls.length > ballsBefore || s.gold < goldBefore;
+  s.togglePause();
+  return { paused, fired, resumed: !s.paused && !s.menus.isOpen };
+});
+check('the pause button opens the menu and stops the battle', blocked.paused,
+  JSON.stringify(blocked));
+check('a tap while paused never reaches the cannon', blocked.fired === false,
+  JSON.stringify(blocked));
+check('the pause button closes it again', blocked.resumed, JSON.stringify(blocked));
+
+// Aim modes. The one that matters: the harder modes must change what the player
+// can *see*, never what the gun actually does — a preview that lied about the
+// ballistics would be a bug dressed as a difficulty setting.
+const aim = await probe(async () => {
+  const mod = await import('/src/core/settings.ts');
+  const s = window.__game.scene.getScene('Siege');
+  s.aimX = 1000;
+  s.aimY = 470;
+  const shotFor = (mode) => {
+    mod.settings.aimMode = mode;
+    const a = s.currentAim();
+    return `${a.vx.toFixed(4)},${a.vy.toFixed(4)}`;
+  };
+  const easy = shotFor('easy');
+  const advanced = shotFor('advanced');
+  const expert = shotFor('expert');
+
+  // Expert covers the gun's whole usable range from its two controls.
+  mod.settings.aimMode = 'expert';
+  const at = (e, p) => {
+    s.sliders.elevation = e;
+    s.sliders.power = p;
+    const a = s.sliders.aim();
+    return { deg: Math.round((Math.atan2(a.vy, a.vx) * 180) / Math.PI),
+             speed: Math.round(Math.hypot(a.vx, a.vy)) };
+  };
+  const low = at(0, 0);
+  const high = at(1, 1);
+
+  // Grabbing a slider must not also count as aiming, or every adjustment fires.
+  const grabsSlider = s.sliders.grab(304, 400);
+  s.sliders.release();
+  const ignoresField = s.sliders.grab(900, 300);
+  s.sliders.release();
+
+  const stored = (() => {
+    mod.settings.aimMode = 'advanced';
+    return JSON.parse(localStorage.getItem('siege-and-stone:settings:v1') || '{}').aimMode;
+  })();
+  mod.settings.aimMode = 'easy';
+  return { easy, advanced, expert, low, high, grabsSlider, ignoresField, stored };
+});
+
+check('advanced changes the preview, not the shot', aim.easy === aim.advanced,
+  `${aim.easy} vs ${aim.advanced}`);
+check('expert really is a different control', aim.expert !== aim.easy,
+  `${aim.expert} vs ${aim.easy}`);
+check('the sliders span the gun\'s full range',
+  aim.low.speed === 300 && aim.high.speed === 1100 && aim.low.deg > -10 && aim.high.deg < -75,
+  JSON.stringify({ low: aim.low, high: aim.high }));
+check('a slider grab is not an aim', aim.grabsSlider === true && aim.ignoresField === false,
+  JSON.stringify(aim));
+check('the aim mode persists', aim.stored === 'advanced', `stored ${aim.stored}`);
+
 console.log('\nerrors:', errors.length ? errors : 'none');
 console.log(`${pass} passed, ${fail} failed`);
 await browser.close();
