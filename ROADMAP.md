@@ -92,7 +92,7 @@ printing as if it had not. It reads `materials.ts` now. A report whose whole job
 is to catch balance drift must not have any of its own — see 6.3 for the two
 conclusions this cost.
 
-### 6.3 Settle the numbers — **first pass done, one problem left**
+### 6.3 Settle the numbers — **harness settled, one decision left**
 
 First report, 6 seeds per matchup:
 
@@ -196,12 +196,66 @@ arrangement. What that shows:
    stacked loses all three and the throne 75% of the time; spread along the
    ground keeps one and holds every time.
 
-Still open: **the scripted attacker now loses to everything except timber.** It
-plays no cards, never concentrates fire and only shoots the lowest block, so
-read it as a floor rather than as "offence is too weak" — but the floor has gone
-from "wins in 17–33s against everything" to "only beats the worst castle in the
-table", and that is a big enough swing to want a played opinion before tuning
-anything else.
+#### With an attacker worth measuring against
+
+The offence column above was near-useless: the scripted attacker lost to
+everything except timber, and it was impossible to tell whether that meant the
+game was balanced or the bot was bad. It was the bot. Measuring where its gold
+went settled it — one full battle against a plain stone wall, spending
+everything on one thing:
+
+```
+  shots     1080g ->  2760 damage    2.56 per gold   45 blocks left
+  knights   1080g ->  7419 damage    6.87 per gold   17 blocks left
+  sappers   1050g ->  8216 damage    7.82 per gold    9 blocks left
+```
+
+**The cannon is the least gold-efficient tool in the game by a factor of
+three**, and the old bot spent nearly everything on it. The rewritten one buys
+troops as its damage engine, keeps the cannon for opening the ground path troops
+walk in on, concentrates fire on the first column that actually blocks that path
+rather than re-picking a target every frame, and plays its cards — which the old
+one never did at all.
+
+```
+  archetype       spend  blocks | AI attacks: win  survived  standing  bases | bot attacks: win   time
+  bare throne        0       0 |            100%  29.8s        0%      - |             100%      7s
+  stone wall       900      60 |             75%  85.5s        2%      - |              50%     88s
+  iron wall        896      28 |             50%    87s       31%      - |               0%      -s
+  timber wall      900     180 |            100%  50.6s        0%      - |             100%     25s
+  stone screens    900      60 |            100%  78.5s        0%      - |             100%   53.8s
+  arch fort        855      57 |             25%  86.2s        2%      - |             100%     61s
+  bases stacked    900      63 |             75%  85.7s        5%    0/3 |             100%   57.4s
+  bases spread     900      63 |              0%     -s        5%    1/3 |             100%   57.4s
+```
+
+Both columns discriminate now, from seven seconds to never, and reading them
+together says more than either alone:
+
+1. **Iron is the strongest material, confirmed from both sides.** It is the one
+   castle a competent attacker never breaks, and second-best against the AI.
+   Two independent measurements agreeing is the first result here that has not
+   later turned out to be a harness artifact.
+2. **The arch fort is a trap.** Best in the game against the AI at 25%, and it
+   falls every time to the bot. Piers and lintels stop lobbed shells and let
+   troops walk straight through the gaps underneath — it is strong against the
+   opponent that shoots and helpless against the one that walks.
+3. **Mass beats gaps twice over.** Gapped screens fall to both attackers where
+   solid stone survives half the time against each.
+
+**The open question, and it is a real one:** the cannon is the game's whole
+interface — the aiming, the arc preview, three difficulty modes — and it is the
+worst thing to spend gold on. Three readings, and no way to choose between them
+from a table:
+
+- The cannon is underpowered and wants cheaper shots or harder hits.
+- Troops are overpowered because nothing shoots back at them in offence mode.
+- It is correct as designed: the cannon is for *precision* — undermining and
+  opening a path — and troops are for grinding, which is a legitimate division
+  of labour that the damage-per-gold number simply does not capture.
+
+This one needs a played opinion rather than another run of the harness, and it
+is the last thing standing between here and a settled milestone 6.
 
 ### 6.4 Phone legibility and touch targets — **done**
 

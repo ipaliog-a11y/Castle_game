@@ -23,6 +23,7 @@
  */
 import { chromium } from 'playwright';
 import { MATERIALS } from '../src/core/materials.ts';
+import { SHOT_GOLD, UNITS } from '../src/core/units.ts';
 
 const BASE = process.env.GAME_URL || 'http://localhost:5173/';
 const SEED_COUNT = Number(process.env.SEEDS || 4);
@@ -159,7 +160,7 @@ async function battle(blocks, seed, mode) {
   await page.waitForTimeout(250);
 
   return page.evaluate(
-    ([key]) => {
+    ([key, cfg]) => {
       // Thousands of steps a second with nobody listening. The sound pack is
       // inert as far as the simulation is concerned, so turning it off cannot
       // change a number in this report — see tests/determinism.test.mjs.
@@ -178,24 +179,101 @@ async function battle(blocks, seed, mode) {
           const basesAtStart = s.basesAlive.size;
 
           /**
-           * A stand-in for a competent attacker: shoot the lowest block that can
-           * be reached, and spend spare gold on troops. It does not play cards,
-           * flank, or concentrate fire — deliberately, so its win rate reads as
-           * a floor for what a human can manage.
+           * A stand-in for a *competent* player, which the previous version was
+           * not.
+           *
+           * It used to shoot the lowest block and buy a troop when it happened
+           * to be able to afford one, and it lost to everything. Measuring
+           * where the gold actually goes explains why — against a plain stone
+           * wall, over one full battle:
+           *
+           *     shots     1080g ->  2760 damage   2.56 per gold
+           *     knights   1080g ->  7419 damage   6.87 per gold
+           *     sappers   1050g ->  8216 damage   7.82 per gold
+           *
+           * The cannon is the least efficient tool in the game by a factor of
+           * three, and the old bot spent nearly everything on it. So this one
+           * treats troops as the damage engine and the cannon as the tool for
+           * the job troops cannot do — opening the ground path they walk in on.
+           *
+           * Three rules, in order:
+           *
+           * 1. **Buy troops whenever affordable**, keeping a shot's worth of
+           *    gold back, up to a cap so the field does not saturate.
+           * 2. **Concentrate the cannon** on the leftmost column that actually
+           *    blocks the ground path, rather than re-picking a target every
+           *    frame and chipping everywhere at once.
+           * 3. **Play the cards**, which the old bot never touched at all.
+           *
+           * It still does not flank, retreat, bait the AI or time anything, so
+           * read it as a competent floor rather than a ceiling.
            */
           const attack = () => {
             if (s.gold === undefined) return;
-            const all = s.castle.all();
-            if (all.length === 0) return;
-            let best = null;
-            for (const b of all) {
-              // Lowest first, nearest as the tie-break: undermine, do not chip.
-              if (!best || b.row > best.row || (b.row === best.row && b.col < best.col)) best = b;
+            if (s.castle.count() === 0) return;
+
+            /**
+             * The first column that actually stops a walking troop.
+             *
+             * Not simply "the lowest block": a lone block on the ground row is
+             * stepped over, because units climb a single-cell ledge. It takes
+             * a block at the feet *and* one above it to be a wall, and that is
+             * the thing worth spending shells on.
+             */
+            let wall = null;
+            for (let c = cfg.buildMin; c <= cfg.throneCol && wall === null; c++) {
+              if (s.castle.has(c, 15) && s.castle.has(c, 14)) wall = c;
             }
-            s.aimX = best.col * 32 + 16;
-            s.aimY = 64 + best.row * 32 + 16;
-            if (s.cooldown <= 0 && s.gold >= 15) s.fire();
-            else if (s.gold >= 110) s.deploy(s.gold >= 200 ? 'sapper' : 'knight');
+            // Nothing blocking: aim at the throne and finish it.
+            const throne = s.castle.find('throne');
+            let target = null;
+            if (wall !== null) {
+              for (let r = 15; r >= 0; r--) {
+                if (s.castle.has(wall, r)) { target = { col: wall, row: r }; break; }
+              }
+            } else if (throne) {
+              target = { col: throne.col, row: throne.row };
+            }
+            if (!target) return;
+            s.aimX = target.col * 32 + 16;
+            s.aimY = 64 + target.row * 32 + 16;
+
+            // --- cards, cheapest useful decision first ---------------------
+            for (let slot = 0; slot < s.cards.hand.length; slot++) {
+              const card = s.cards.hand[slot];
+              if (!card || !s.cards.canPlay(slot)) continue;
+              if (card.id === 'sapperCharge') {
+                // The biggest single hit in the game, straight into the wall.
+                s.resolveTargeted(slot, s.aimX, s.aimY);
+                break;
+              }
+              if (card.id === 'blackPowder' && s.cooldown <= 0 && s.gold >= cfg.shotGold) {
+                s.onCardPressed(slot, card);
+                break;
+              }
+              if (card.id === 'rally' && s.units.length >= 2) {
+                s.onCardPressed(slot, card);
+                break;
+              }
+              if (card.id === 'chainShot' && s.cards.energy >= s.cards.energyMax - 1) {
+                // Only when energy would otherwise be wasted: three weak balls
+                // are worse than one strong one against a wall.
+                s.onCardPressed(slot, card);
+                break;
+              }
+            }
+
+            // --- troops first, cannon second -------------------------------
+            const room = s.units.length < cfg.maxUnits;
+            if (room && s.gold >= cfg.sapperGold + cfg.shotGold) {
+              s.deploy('sapper');
+              return;
+            }
+            if (room && s.gold >= cfg.knightGold + cfg.shotGold) {
+              s.deploy('knight');
+              return;
+            }
+            if (s.cooldown <= 0 && s.gold >= cfg.shotGold) s.fire();
           };
 
           const MAX_STEPS = 6000; // 100s of battle; the clock ends it at 90
@@ -220,7 +298,18 @@ async function battle(blocks, seed, mode) {
         }, 250);
       });
     },
-    [mode],
+    [
+      mode,
+      {
+        shotGold: SHOT_GOLD,
+        knightGold: UNITS.knight.gold,
+        sapperGold: UNITS.sapper.gold,
+        // Enough to keep pressure on without a crowd that dies to one collapse.
+        maxUnits: 7,
+        buildMin: 20,
+        throneCol: 35,
+      },
+    ],
   );
 }
 
