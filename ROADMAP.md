@@ -309,16 +309,28 @@ Left undone: no music, and no mute control inside a battle — the toggle is on
 the menu, builder and result screens, because the battle top bar is already
 over its touch-target budget and a phone's volume switch is faster anyway.
 
-### 6.7 Impact polish — **mostly done**
+### 6.7 Impact polish — **done**
 
-Hit stop, camera punch, an escalating word on a four-block event, and dust on
-every landing sized by the fall. Debris tumbles on the way down. See DESIGN.md
-for why the freeze is safe and where it has to live.
+Hit stop, camera punch, an escalating word on a four-block event, dust on every
+landing sized by the fall, debris that tumbles, and four discrete damage stages
+carried by cracks rather than by a tint. See DESIGN.md for why the freeze is
+safe and where it has to live.
 
-Still open from the original list:
+### 6.8 Pause and options — **done**
 
-- **Cracks at hitpoint thresholds** rather than the current smooth tint, so
-  damage reads at a glance instead of on inspection.
+- **Pause**, built on the same wall-clock trick as the hit stop, so it costs no
+  battle time and the simulation cannot tell. Give up and Surrender moved inside
+  it, which is where an irreversible action belongs.
+- **An options panel**, shared with the pause menu. Sound moved into it and the
+  standalone mute button went away.
+- **Three aim modes** — easy, advanced, expert — chosen there and persisted.
+  Advanced truncates the preview at mid-field; expert replaces tap-to-target
+  with elevation and power sliders. The harder modes change what is *shown*,
+  never the ballistics, and a test holds that line.
+
+The settings module is deliberately small and validating: a value written by a
+later version, or edited by hand, falls back to the default rather than putting
+the game in a state it cannot draw.
 
 ### 6.7 Impact polish — original list
 

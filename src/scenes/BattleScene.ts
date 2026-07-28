@@ -208,6 +208,16 @@ export abstract class BattleScene extends Phaser.Scene {
    * keeps it out of the simulation entirely.
    */
   private hitStop = 0;
+  /**
+   * Whether the battle is stopped by the player.
+   *
+   * The same trick as the hit stop and safe for the same reason: `update` stops
+   * feeding the accumulator, so the simulation resumes on exactly the step it
+   * was about to run. Nothing in `step` reads it, a paused battle loses no
+   * battle time, and a run driven directly through `step` — the balance harness
+   * and most of the tests — cannot tell the difference.
+   */
+  protected paused = false;
   /** Battle time of the last shouted word, so a chain reaction says it once. */
   private lastBigHit = -Infinity;
   private bigHitText!: Phaser.GameObjects.Text;
@@ -249,6 +259,7 @@ export abstract class BattleScene extends Phaser.Scene {
     this.timeLeft = SIEGE_DURATION_MS;
     this.elapsed = 0;
     this.hitStop = 0;
+    this.paused = false;
     this.lastBigHit = -Infinity;
     this.finished = false;
     this.castleDamageMul = 1;
@@ -285,6 +296,15 @@ export abstract class BattleScene extends Phaser.Scene {
     }
   }
 
+  /** Stops the battle where it stands. Costs the player no battle time. */
+  protected setPaused(paused: boolean): void {
+    this.paused = paused;
+    // Dropping the accumulator matters: without it, the frame that resumes
+    // hands back however long the menu was open, and the battle lurches forward
+    // by the whole catch-up cap the instant play continues.
+    if (!paused) this.accumulator = 0;
+  }
+
   /**
    * Puts the castle back as it was built and clears everything in flight.
    *
@@ -315,6 +335,13 @@ export abstract class BattleScene extends Phaser.Scene {
 
   override update(_time: number, deltaMs: number): void {
     if (this.finished) return;
+
+    if (this.paused) {
+      // Still drawn, so the held frame is something you can study — which is
+      // half of what a pause is for in a game about where to shoot next.
+      this.drawWorld();
+      return;
+    }
 
     if (this.hitStop > 0) {
       // Frozen. The accumulator is deliberately not fed, so when time resumes
